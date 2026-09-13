@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LTspice Schematic Viewer</title>
+<style>
+  :root {
+    --bg: #fbfbf9; --ink: #111; --muted: #4b5563; --net: #1d4ed8;
+    --probe: #047857; --warn: #b45309; --bar: #ffffff; --line: #d4d4d8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14151a; --ink: #e8e8ea; --muted: #9ca3af; --net: #7dd3fc;
+      --probe: #6ee7b7; --warn: #fbbf24; --bar: #1c1d23; --line: #2e3038;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  #bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: var(--bar); border-bottom: 1px solid var(--line); }
+  #name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; color: var(--muted); }
+  button { min-height: 44px; min-width: 44px; padding: 0 12px;
+    background: none; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink); font: inherit; }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--bar); }
+  #stage { position: absolute; inset: 57px 0 0 0; overflow: hidden;
+    touch-action: none; }
+  #stage svg { position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; transform-origin: 0 0; }
+  #banner { position: absolute; left: 8px; right: 8px; bottom: 8px;
+    padding: 10px 12px; border-radius: 10px; background: var(--bar);
+    border: 1px solid var(--warn); color: var(--warn); }
+  #banner[hidden] { display: none; }
+  #empty { position: absolute; inset: 0; display: grid; place-items: center;
+    padding: 24px; text-align: center; color: var(--muted); }
+  #file { display: none; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="open">Open</button>
+  <span id="name">No file</span>
+  <button id="ann" aria-pressed="true">Notes</button>
+  <button id="fit">Fit</button>
+</div>
+<div id="stage">
+  <div id="empty">Tap <b>Open</b> and choose an .asc file.<br>
+    Select its .asy symbol files at the same time if it uses custom parts.</div>
+</div>
+<div id="banner" hidden></div>
+<input id="file" type="file" multiple>
+<script>
+const SYMBOLS = {"bi":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":56,"x2":4,"y2":44},{"style":"Normal","x1":0,"y1":56,"x2":-4,"y2":44},{"style":"Normal","x1":-4,"y1":44,"x2":4,"y2":44},{"style":"Normal","x1":0,"y1":24,"x2":0,"y2":44},{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":80,"just":"Left","size":2}},"attrs":{"Value":"I=F(...)","Prefix":"B","Description":"Arbitrary behavioral current source"},"unknown":0},"bi2":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":24,"x2":4,"y2":36},{"style":"Normal","x1":0,"y1":24,"x2":-4,"y2":36},{"style":"Normal","x1":-4,"y1":36,"x2":4,"y2":36},{"style":"Normal","x1":0,"y1":36,"x2":0,"y2":56},{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[],"texts":[],"pins":[{"x":0,"y":80,"name":"+","order":1},{"x":0,"y":0,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":81,"just":"Left","size":2}},"attrs":{"Value":"I=F(...)","Prefix":"B","Description":"Arbitrary behavioral current source"},"unknown":0},"bv":{"type":"CELL","lines":[{"style":"Normal","x1":-8,"y1":36,"x2":8,"y2":36},{"style":"Normal","x1":-8,"y1":76,"x2":8,"y2":76},{"style":"Normal","x1":0,"y1":28,"x2":0,"y2":44},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":16,"name":"+","order":1},{"x":0,"y":96,"name":"-","order":2}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"V=F(...)","Prefix":"B","Description":"Arbitrary behavioral voltage source"},"unknown":0},"cap":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":36,"x2":16,"y2":64},{"style":"Normal","x1":16,"y1":28,"x2":16,"y2":0},{"style":"Normal","x1":0,"y1":28,"x2":32,"y2":28},{"style":"Normal","x1":0,"y1":36,"x2":32,"y2":36}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"A","order":1},{"x":16,"y":64,"name":"B","order":2}],"windows":{"0":{"x":24,"y":8,"just":"Left","size":2},"3":{"x":24,"y":56,"just":"Left","size":2}},"attrs":{"Value":"C","Prefix":"C","Description":"Capacitor"},"unknown":0},"csw":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":56},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":20},{"style":"Normal","x1":0,"y1":20,"x2":20,"y2":44}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72},{"style":"Normal","x1":-4,"y1":60,"x2":4,"y2":52},{"style":"Normal","x1":16,"y1":40,"x2":24,"y2":48}],"arcs":[],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":88,"just":"Left","size":2}},"attrs":{"Value":"CSW","Prefix":"W","Description":"Current controlled switch"},"unknown":0},"current":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":56,"x2":4,"y2":44},{"style":"Normal","x1":0,"y1":56,"x2":-4,"y2":44},{"style":"Normal","x1":-4,"y1":44,"x2":4,"y2":44},{"style":"Normal","x1":0,"y1":24,"x2":0,"y2":44},{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":80,"just":"Left","size":2}},"attrs":{"Value":"I","Prefix":"I","Description":"Current source, either DC, AC, PULSE, SINE, PWL, EXP, or SFFM"},"unknown":0},"diode":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":32,"y2":20},{"style":"Normal","x1":32,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":20},{"style":"Normal","x1":16,"y1":44,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"+","order":1},{"x":16,"y":64,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":64,"just":"Left","size":2}},"attrs":{"Value":"D","Prefix":"D","Description":"Diode"},"unknown":0},"e":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":32,"x2":-32,"y2":32},{"style":"Normal","x1":-32,"y1":32,"x2":-24,"y2":36},{"style":"Normal","x1":-48,"y1":80,"x2":-32,"y2":80},{"style":"Normal","x1":-32,"y1":80,"x2":-24,"y2":76},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":-48,"y1":72,"x2":-40,"y2":72},{"style":"Normal","x1":-48,"y1":40,"x2":-40,"y2":40},{"style":"Normal","x1":-44,"y1":36,"x2":-44,"y2":44},{"style":"Normal","x1":-4,"y1":72,"x2":4,"y2":72},{"style":"Normal","x1":-4,"y1":40,"x2":4,"y2":40},{"style":"Normal","x1":0,"y1":36,"x2":0,"y2":44}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":16,"name":"+","order":1},{"x":0,"y":96,"name":"-","order":2},{"x":-48,"y":32,"name":"P","order":3},{"x":-48,"y":80,"name":"N","order":4}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"E","Prefix":"E","Description":"Voltage dependent voltage source"},"unknown":0},"e2":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":32,"x2":-32,"y2":32},{"style":"Normal","x1":-32,"y1":32,"x2":-24,"y2":36},{"style":"Normal","x1":-48,"y1":80,"x2":-32,"y2":80},{"style":"Normal","x1":-32,"y1":80,"x2":-24,"y2":76},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":-48,"y1":72,"x2":-40,"y2":72},{"style":"Normal","x1":-44,"y1":76,"x2":-44,"y2":68},{"style":"Normal","x1":-48,"y1":40,"x2":-40,"y2":40},{"style":"Normal","x1":-4,"y1":72,"x2":4,"y2":72},{"style":"Normal","x1":-4,"y1":40,"x2":4,"y2":40},{"style":"Normal","x1":0,"y1":36,"x2":0,"y2":44}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":16,"name":"+","order":1},{"x":0,"y":96,"name":"-","order":2},{"x":-48,"y":80,"name":"P","order":3},{"x":-48,"y":32,"name":"N","order":4}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"E","Prefix":"E","Description":"Voltage dependent voltage source"},"unknown":0},"f":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":56,"x2":4,"y2":44},{"style":"Normal","x1":0,"y1":56,"x2":-4,"y2":44},{"style":"Normal","x1":-4,"y1":44,"x2":4,"y2":44},{"style":"Normal","x1":0,"y1":24,"x2":0,"y2":44},{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":80,"just":"Left","size":2}},"attrs":{"Value":"F","Prefix":"F","Description":"Linear current dependent current source"},"unknown":0},"ferritebead":{"type":"BLOCK","lines":[{"style":"Normal","x1":-16,"y1":8,"x2":-16,"y2":-8},{"style":"Normal","x1":0,"y1":-8,"x2":0,"y2":-32},{"style":"Normal","x1":0,"y1":12,"x2":0,"y2":32},{"style":"Normal","x1":16,"y1":8,"x2":16,"y2":-8}],"rects":[],"circles":[{"style":"Normal","x1":-16,"y1":-4,"x2":16,"y2":-12},{"style":"Normal","x1":-7,"y1":-7,"x2":7,"y2":-9}],"arcs":[{"style":"Normal","x1":16,"y1":4,"x2":-16,"y2":12,"xs":-16,"ys":8,"xe":16,"ye":8}],"texts":[],"pins":[{"x":0,"y":-32,"name":"A","order":1},{"x":0,"y":32,"name":"B","order":2}],"windows":{"0":{"x":25,"y":0,"just":"Left","size":2}},"attrs":{"Prefix":"L_Ferrite_Bead","Description":"A Ferrite Bead"},"unknown":0},"ferritebead2":{"type":"BLOCK","lines":[{"style":"Normal","x1":0,"y1":-9,"x2":0,"y2":-32},{"style":"Normal","x1":0,"y1":9,"x2":0,"y2":32},{"style":"Normal","x1":-9,"y1":8,"x2":9,"y2":8},{"style":"Normal","x1":-9,"y1":7,"x2":9,"y2":7},{"style":"Normal","x1":-9,"y1":6,"x2":9,"y2":6},{"style":"Normal","x1":-9,"y1":6,"x2":9,"y2":6},{"style":"Normal","x1":-9,"y1":5,"x2":9,"y2":5},{"style":"Normal","x1":-9,"y1":4,"x2":9,"y2":4},{"style":"Normal","x1":-9,"y1":3,"x2":9,"y2":3},{"style":"Normal","x1":-9,"y1":3,"x2":9,"y2":3},{"style":"Normal","x1":-9,"y1":2,"x2":9,"y2":2},{"style":"Normal","x1":-9,"y1":1,"x2":9,"y2":1},{"style":"Normal","x1":-9,"y1":0,"x2":9,"y2":0},{"style":"Normal","x1":-9,"y1":0,"x2":9,"y2":0},{"style":"Normal","x1":-9,"y1":-1,"x2":9,"y2":-1},{"style":"Normal","x1":-9,"y1":-4,"x2":9,"y2":-4},{"style":"Normal","x1":-9,"y1":-5,"x2":9,"y2":-5},{"style":"Normal","x1":-9,"y1":-6,"x2":9,"y2":-6},{"style":"Normal","x1":-9,"y1":-6,"x2":9,"y2":-6},{"style":"Normal","x1":-9,"y1":-7,"x2":9,"y2":-7},{"style":"Normal","x1":-9,"y1":-8,"x2":9,"y2":-8},{"style":"Normal","x1":-9,"y1":-3,"x2":9,"y2":-3},{"style":"Normal","x1":-9,"y1":-2,"x2":9,"y2":-2},{"style":"Normal","x1":7,"y1":9,"x2":7,"y2":-9},{"style":"Normal","x1":8,"y1":9,"x2":8,"y2":-9},{"style":"Normal","x1":5,"y1":9,"x2":5,"y2":-9},{"style":"Normal","x1":6,"y1":9,"x2":6,"y2":-9},{"style":"Normal","x1":3,"y1":9,"x2":3,"y2":-9},{"style":"Normal","x1":4,"y1":9,"x2":4,"y2":-9},{"style":"Normal","x1":1,"y1":9,"x2":1,"y2":-9},{"style":"Normal","x1":2,"y1":9,"x2":2,"y2":-9},{"style":"Normal","x1":-1,"y1":9,"x2":-1,"y2":-9},{"style":"Normal","x1":0,"y1":9,"x2":0,"y2":-9},{"style":"Normal","x1":-3,"y1":9,"x2":-3,"y2":-9},{"style":"Normal","x1":-2,"y1":9,"x2":-2,"y2":-9},{"style":"Normal","x1":-5,"y1":9,"x2":-5,"y2":-9},{"style":"Normal","x1":-4,"y1":9,"x2":-4,"y2":-9},{"style":"Normal","x1":-7,"y1":9,"x2":-7,"y2":-9},{"style":"Normal","x1":-6,"y1":9,"x2":-6,"y2":-9},{"style":"Normal","x1":-8,"y1":9,"x2":-8,"y2":-9}],"rects":[{"style":"Normal","x1":-9,"y1":-9,"x2":9,"y2":9}],"circles":[],"arcs":[],"texts":[],"pins":[{"x":0,"y":-32,"name":"A","order":1},{"x":0,"y":32,"name":"B","order":2}],"windows":{"0":{"x":21,"y":0,"just":"Left","size":2}},"attrs":{"Prefix":"L_Ferrite_Bead","Description":"A Ferrite Bead(Alternate symbol)"},"unknown":0},"fra":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":-48,"x2":0,"y2":-64},{"style":"Normal","x1":-16,"y1":-48,"x2":-16,"y2":-16},{"style":"Normal","x1":16,"y1":-48,"x2":-16,"y2":-48},{"style":"Normal","x1":16,"y1":-16,"x2":16,"y2":-48}],"rects":[],"circles":[],"arcs":[{"style":"Normal","x1":32,"y1":-16,"x2":0,"y2":16,"xs":16,"ys":-16,"xe":0,"ye":0},{"style":"Normal","x1":-32,"y1":-16,"x2":0,"y2":16,"xs":0,"ys":0,"xe":-16,"ye":-16},{"style":"Normal","x1":0,"y1":-19,"x2":-4,"y2":-43,"xs":0,"ys":-31,"xe":-4,"ye":-31},{"style":"Normal","x1":-8,"y1":-35,"x2":-12,"y2":-27,"xs":-8,"ys":-31,"xe":-12,"ye":-31},{"style":"Normal","x1":-4,"y1":-39,"x2":-8,"y2":-23,"xs":-8,"ys":-31,"xe":-4,"ye":-31},{"style":"Normal","x1":0,"y1":-43,"x2":4,"y2":-19,"xs":0,"ys":-31,"xe":4,"ye":-31},{"style":"Normal","x1":8,"y1":-27,"x2":12,"y2":-35,"xs":8,"ys":-31,"xe":12,"ye":-31},{"style":"Normal","x1":4,"y1":-23,"x2":8,"y2":-39,"xs":8,"ys":-31,"xe":4,"ye":-31}],"texts":[],"pins":[{"x":0,"y":-64,"name":"OUT","order":1},{"x":0,"y":0,"name":"IN","order":2}],"windows":{"0":{"x":21,"y":-39,"just":"Left","size":2}},"attrs":{"Prefix":"@","Description":"Frequency Response Analyzer"},"unknown":0},"fraprobe":{"type":"CELL","lines":[{"style":"Normal","x1":-9,"y1":-60,"x2":-26,"y2":-60},{"style":"Normal","x1":10,"y1":-40,"x2":-9,"y2":-60},{"style":"Normal","x1":26,"y1":-36,"x2":10,"y2":-40},{"style":"Normal","x1":-9,"y1":-53,"x2":-26,"y2":-53},{"style":"Normal","x1":8,"y1":-60,"x2":-9,"y2":-53},{"style":"Normal","x1":26,"y1":-36,"x2":8,"y2":-60}],"rects":[{"style":"Normal","x1":48,"y1":0,"x2":-48,"y2":-96},{"style":"Normal","x1":32,"y1":-32,"x2":-32,"y2":-64}],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":-80,"name":"O+","order":1},{"x":48,"y":-16,"name":"O–","order":2},{"x":-48,"y":-80,"name":"I+","order":3},{"x":-48,"y":-16,"name":"I–","order":4}],"windows":{"0":{"x":0,"y":-114,"just":"Center","size":2}},"attrs":{"Prefix":"&","Description":"Frequency Response Probe"},"unknown":0},"g":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":32,"x2":-32,"y2":32},{"style":"Normal","x1":-32,"y1":32,"x2":-24,"y2":36},{"style":"Normal","x1":-48,"y1":80,"x2":-32,"y2":80},{"style":"Normal","x1":-32,"y1":80,"x2":-24,"y2":76},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":-48,"y1":72,"x2":-40,"y2":72},{"style":"Normal","x1":-48,"y1":40,"x2":-40,"y2":40},{"style":"Normal","x1":-44,"y1":36,"x2":-44,"y2":44},{"style":"Normal","x1":4,"y1":52,"x2":0,"y2":40},{"style":"Normal","x1":-4,"y1":52,"x2":0,"y2":40},{"style":"Normal","x1":-4,"y1":52,"x2":4,"y2":52},{"style":"Normal","x1":0,"y1":52,"x2":0,"y2":72}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":96,"name":"+","order":1},{"x":0,"y":16,"name":"-","order":2},{"x":-48,"y":32,"name":"NC+","order":3},{"x":-48,"y":80,"name":"NC-","order":4}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"G","Prefix":"G","Description":"Voltage dependent current source"},"unknown":0},"g2":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":32,"x2":-32,"y2":32},{"style":"Normal","x1":-32,"y1":32,"x2":-24,"y2":36},{"style":"Normal","x1":-48,"y1":80,"x2":-32,"y2":80},{"style":"Normal","x1":-32,"y1":80,"x2":-24,"y2":76},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":-48,"y1":72,"x2":-40,"y2":72},{"style":"Normal","x1":-48,"y1":40,"x2":-40,"y2":40},{"style":"Normal","x1":-44,"y1":76,"x2":-44,"y2":68},{"style":"Normal","x1":4,"y1":52,"x2":0,"y2":40},{"style":"Normal","x1":-4,"y1":52,"x2":0,"y2":40},{"style":"Normal","x1":-4,"y1":52,"x2":4,"y2":52},{"style":"Normal","x1":0,"y1":52,"x2":0,"y2":72}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":96,"name":"+","order":1},{"x":0,"y":16,"name":"-","order":2},{"x":-48,"y":80,"name":"NC+","order":3},{"x":-48,"y":32,"name":"NC-","order":4}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"G","Prefix":"G","Description":"Voltage dependent current source"},"unknown":0},"h":{"type":"CELL","lines":[{"style":"Normal","x1":-8,"y1":36,"x2":8,"y2":36},{"style":"Normal","x1":-8,"y1":76,"x2":8,"y2":76},{"style":"Normal","x1":0,"y1":28,"x2":0,"y2":44},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":16,"name":"+","order":1},{"x":0,"y":96,"name":"-","order":2}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"H","Prefix":"H","Description":"Linear current dependent voltage source"},"unknown":0},"ind":{"type":"CELL","lines":[],"rects":[],"circles":[],"arcs":[{"style":"Normal","x1":0,"y1":40,"x2":32,"y2":72,"xs":4,"ys":68,"xe":4,"ye":44},{"style":"Normal","x1":0,"y1":64,"x2":32,"y2":96,"xs":16,"ys":96,"xe":4,"ye":68},{"style":"Normal","x1":0,"y1":16,"x2":32,"y2":48,"xs":4,"ys":44,"xe":16,"ye":16}],"texts":[],"pins":[{"x":16,"y":16,"name":"A","order":1},{"x":16,"y":96,"name":"B","order":2}],"windows":{"0":{"x":36,"y":40,"just":"Left","size":2},"3":{"x":36,"y":80,"just":"Left","size":2}},"attrs":{"Value":"L","Prefix":"L","Description":"Inductor"},"unknown":0},"ind2":{"type":"CELL","lines":[],"rects":[],"circles":[{"style":"Normal","x1":4,"y1":80,"x2":12,"y2":88}],"arcs":[{"style":"Normal","x1":0,"y1":40,"x2":32,"y2":72,"xs":4,"ys":68,"xe":4,"ye":44},{"style":"Normal","x1":0,"y1":64,"x2":32,"y2":96,"xs":16,"ys":96,"xe":4,"ye":68},{"style":"Normal","x1":0,"y1":16,"x2":32,"y2":48,"xs":4,"ys":44,"xe":16,"ye":16}],"texts":[],"pins":[{"x":16,"y":16,"name":"A","order":1},{"x":16,"y":96,"name":"B","order":2}],"windows":{"0":{"x":36,"y":40,"just":"Left","size":2},"3":{"x":36,"y":80,"just":"Left","size":2}},"attrs":{"Value":"L","Prefix":"L","Description":"Inductor"},"unknown":0},"iso16750-2":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8},{"style":"Normal","x1":-8,"y1":55,"x2":-8,"y2":18},{"style":"Normal","x1":-18,"y1":55,"x2":-8,"y2":55}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[{"style":"Normal","x1":-8,"y1":-18,"x2":50,"y2":55,"xs":-8,"ys":18,"xe":20,"ye":55}],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":48,"y":16,"just":"Left","size":2},"1":{"x":48,"y":40,"just":"Left","size":2},"38":{"x":48,"y":64,"just":"Left","size":2}},"attrs":{"SpiceModel":"4-6-3_12V_StartingProfile","Description":"ISO-16750-2 Transients","Prefix":"X","ModelFile":"ISO16750-2.lib"},"unknown":0},"iso7637-2":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8},{"style":"Normal","x1":-8,"y1":55,"x2":-8,"y2":18},{"style":"Normal","x1":-18,"y1":55,"x2":-8,"y2":55}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[{"style":"Normal","x1":-8,"y1":-18,"x2":50,"y2":55,"xs":-8,"ys":18,"xe":20,"ye":55}],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":48,"y":16,"just":"Left","size":2},"1":{"x":48,"y":40,"just":"Left","size":2},"38":{"x":48,"y":64,"just":"Left","size":2}},"attrs":{"SpiceModel":"Pulse1_12V","Description":"ISO-7637-2 Transeints","Prefix":"X","ModelFile":"ISO7637-2.lib"},"unknown":0},"led":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":32,"y2":20},{"style":"Normal","x1":32,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":20},{"style":"Normal","x1":16,"y1":44,"x2":16,"y2":64},{"style":"Normal","x1":72,"y1":32,"x2":68,"y2":40},{"style":"Normal","x1":72,"y1":32,"x2":64,"y2":32},{"style":"Normal","x1":72,"y1":48,"x2":68,"y2":56},{"style":"Normal","x1":72,"y1":48,"x2":64,"y2":48}],"rects":[],"circles":[],"arcs":[{"style":"Normal","x1":40,"y1":20,"x2":56,"y2":36,"xs":56,"ys":28,"xe":40,"ye":24},{"style":"Normal","x1":56,"y1":20,"x2":72,"y2":36,"xs":56,"ys":28,"xe":72,"ye":32},{"style":"Normal","x1":40,"y1":36,"x2":56,"y2":52,"xs":56,"ys":44,"xe":40,"ye":40},{"style":"Normal","x1":56,"y1":36,"x2":72,"y2":52,"xs":56,"ys":44,"xe":72,"ye":48}],"texts":[],"pins":[{"x":16,"y":0,"name":"+","order":1},{"x":16,"y":64,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":64,"just":"Left","size":2}},"attrs":{"Value":"D","Prefix":"D","Description":"Light Emitting Diode"},"unknown":0},"load":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":48,"x2":40,"y2":8},{"style":"Normal","x1":40,"y1":8,"x2":28,"y2":12},{"style":"Normal","x1":40,"y1":8,"x2":36,"y2":20},{"style":"Normal","x1":8,"y1":8,"x2":8,"y2":56},{"style":"Normal","x1":8,"y1":56,"x2":24,"y2":56},{"style":"Normal","x1":24,"y1":56,"x2":24,"y2":8},{"style":"Normal","x1":24,"y1":8,"x2":8,"y2":8},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":8},{"style":"Normal","x1":16,"y1":56,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"A","order":1},{"x":16,"y":64,"name":"B","order":2}],"windows":{"0":{"x":48,"y":8,"just":"Left","size":2},"3":{"x":48,"y":56,"just":"Left","size":2}},"attrs":{"Value":"I","Prefix":"I","Description":"Current Source, either DC, AC, PULSE, SINE, PWL, EXP, or SFFM"},"unknown":0},"load2":{"type":"CELL","lines":[{"style":"Normal","x1":36,"y1":4,"x2":32,"y2":16},{"style":"Normal","x1":36,"y1":4,"x2":24,"y2":8},{"style":"Normal","x1":-32,"y1":72,"x2":36,"y2":4},{"style":"Normal","x1":0,"y1":56,"x2":4,"y2":48},{"style":"Normal","x1":0,"y1":56,"x2":-4,"y2":48},{"style":"Normal","x1":-4,"y1":48,"x2":4,"y2":48},{"style":"Normal","x1":0,"y1":24,"x2":0,"y2":48},{"style":"Normal","x1":0,"y1":80,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":8}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":72}],"arcs":[],"texts":[],"pins":[{"x":0,"y":0,"name":"+","order":1},{"x":0,"y":80,"name":"-","order":2}],"windows":{"0":{"x":17,"y":-16,"just":"Left","size":2},"3":{"x":25,"y":84,"just":"Left","size":2}},"attrs":{"Value":"I","Prefix":"I","Description":"Current Source, either DC, AC, PULSE, SINE, PWL, EXP, or SFFM"},"unknown":0},"lpnp":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":64,"x2":44,"y2":76},{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":16,"y1":64,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":64,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":16,"y2":16},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":16,"y1":48,"x2":0,"y2":48},{"style":"Normal","x1":52,"y1":48,"x2":64,"y2":48},{"style":"Normal","x1":16,"y1":48,"x2":36,"y2":48},{"style":"Normal","x1":36,"y1":40,"x2":36,"y2":56},{"style":"Normal","x1":52,"y1":40,"x2":52,"y2":56},{"style":"Normal","x1":52,"y1":40,"x2":36,"y2":48},{"style":"Normal","x1":52,"y1":56,"x2":36,"y2":48}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3},{"x":64,"y":48,"name":"S","order":4}],"windows":{"0":{"x":72,"y":32,"just":"Left","size":2},"3":{"x":72,"y":68,"just":"Left","size":2}},"attrs":{"Value":"LPNP","Prefix":"QP","Description":"Bipolar Lateral PNP transistor.  You would normally use this with your own .model statement."},"unknown":0},"ltline":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":16,"x2":48,"y2":16},{"style":"Normal","x1":-36,"y1":12,"x2":36,"y2":12},{"style":"Normal","x1":-36,"y1":-12,"x2":36,"y2":-12},{"style":"Normal","x1":-48,"y1":-16,"x2":48,"y2":-16},{"style":"Normal","x1":-48,"y1":16,"x2":-36,"y2":12},{"style":"Normal","x1":-48,"y1":-16,"x2":-36,"y2":-12},{"style":"Normal","x1":48,"y1":16,"x2":36,"y2":12},{"style":"Normal","x1":48,"y1":-16,"x2":36,"y2":-12},{"style":"Normal","x1":-40,"y1":0,"x2":-32,"y2":0},{"style":"Normal","x1":-32,"y1":0,"x2":-24,"y2":8},{"style":"Normal","x1":-24,"y1":8,"x2":-8,"y2":-8},{"style":"Normal","x1":-8,"y1":-8,"x2":8,"y2":8},{"style":"Normal","x1":8,"y1":8,"x2":24,"y2":-8},{"style":"Normal","x1":24,"y1":-8,"x2":32,"y2":0},{"style":"Normal","x1":32,"y1":0,"x2":40,"y2":0}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":-48,"y":-16,"name":"I1","order":1},{"x":-48,"y":16,"name":"R1","order":2},{"x":48,"y":-16,"name":"I2","order":3},{"x":48,"y":16,"name":"R2","order":4}],"windows":{"0":{"x":0,"y":-16,"just":"Bottom","size":2},"3":{"x":0,"y":16,"just":"Top","size":2}},"attrs":{"Value":"LTRA","Prefix":"O","Description":"Lossy Transmission Line.  Note: You must supply the .model for this device"},"unknown":0},"mesfet":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":12,"x2":16,"y2":84},{"style":"Normal","x1":48,"y1":80,"x2":48,"y2":96},{"style":"Normal","x1":48,"y1":16,"x2":48,"y2":0},{"style":"Normal","x1":16,"y1":16,"x2":48,"y2":16},{"style":"Normal","x1":0,"y1":80,"x2":16,"y2":80},{"style":"Normal","x1":16,"y1":80,"x2":48,"y2":80}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":80,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"NMF","Prefix":"Z","Description":"GaAs MESFET transistor  Note: You must supply the .model for this device"},"unknown":0},"njf":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":16,"x2":16,"y2":80},{"style":"Normal","x1":48,"y1":72,"x2":48,"y2":96},{"style":"Normal","x1":16,"y1":72,"x2":48,"y2":72},{"style":"Normal","x1":48,"y1":24,"x2":48,"y2":0},{"style":"Normal","x1":16,"y1":24,"x2":48,"y2":24},{"style":"Normal","x1":0,"y1":64,"x2":4,"y2":64},{"style":"Normal","x1":4,"y1":68,"x2":16,"y2":64},{"style":"Normal","x1":4,"y1":60,"x2":16,"y2":64},{"style":"Normal","x1":4,"y1":60,"x2":4,"y2":68}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":64,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"NJF","Prefix":"JN","Description":"N-Channel JFET"},"unknown":0},"nmos":{"type":"CELL","lines":[{"style":"Normal","x1":48,"y1":48,"x2":48,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":48,"y2":80},{"style":"Normal","x1":40,"y1":48,"x2":48,"y2":48},{"style":"Normal","x1":16,"y1":48,"x2":40,"y2":44},{"style":"Normal","x1":16,"y1":48,"x2":40,"y2":52},{"style":"Normal","x1":40,"y1":44,"x2":40,"y2":52},{"style":"Normal","x1":16,"y1":8,"x2":16,"y2":24},{"style":"Normal","x1":16,"y1":40,"x2":16,"y2":56},{"style":"Normal","x1":16,"y1":72,"x2":16,"y2":88},{"style":"Normal","x1":0,"y1":80,"x2":8,"y2":80},{"style":"Normal","x1":8,"y1":16,"x2":8,"y2":80},{"style":"Normal","x1":48,"y1":16,"x2":16,"y2":16},{"style":"Normal","x1":48,"y1":0,"x2":48,"y2":16}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":80,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"NMOS","Prefix":"MN","Description":"N-Channel MOSFET transistor"},"unknown":0},"nmos4":{"type":"CELL","lines":[{"style":"Normal","x1":48,"y1":80,"x2":48,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":48,"y2":80},{"style":"Normal","x1":40,"y1":48,"x2":48,"y2":48},{"style":"Normal","x1":16,"y1":48,"x2":40,"y2":44},{"style":"Normal","x1":16,"y1":48,"x2":40,"y2":52},{"style":"Normal","x1":40,"y1":44,"x2":40,"y2":52},{"style":"Normal","x1":16,"y1":8,"x2":16,"y2":24},{"style":"Normal","x1":16,"y1":40,"x2":16,"y2":56},{"style":"Normal","x1":16,"y1":72,"x2":16,"y2":88},{"style":"Normal","x1":0,"y1":80,"x2":8,"y2":80},{"style":"Normal","x1":8,"y1":16,"x2":8,"y2":80},{"style":"Normal","x1":48,"y1":16,"x2":16,"y2":16},{"style":"Normal","x1":48,"y1":0,"x2":48,"y2":16}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":80,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3},{"x":48,"y":48,"name":"B","order":4}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"NMOS","Prefix":"MN","Description":"N-Channel MOSFET transistor with explicit substrate connection(used for monolithic MOSFETS)"},"unknown":0},"npn":{"type":"CELL","lines":[{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":64,"y1":96,"x2":44,"y2":76},{"style":"Normal","x1":64,"y1":96,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":16,"y2":64},{"style":"Normal","x1":16,"y1":80,"x2":16,"y2":16},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":16,"y1":48,"x2":0,"y2":48}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":68,"just":"Left","size":2}},"attrs":{"Value":"NPN","Prefix":"QN","Description":"Bipolar NPN transistor"},"unknown":0},"npn2":{"type":"CELL","lines":[{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":64,"y1":96,"x2":44,"y2":76},{"style":"Normal","x1":64,"y1":96,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":16,"y2":64},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":12,"y1":48,"x2":0,"y2":48}],"rects":[{"style":"Normal","x1":16,"y1":72,"x2":12,"y2":24}],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":68,"just":"Left","size":2}},"attrs":{"Value":"NPN","Prefix":"QN","Description":"Bipolar NPN transistor"},"unknown":0},"npn3":{"type":"CELL","lines":[{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":64,"y1":96,"x2":44,"y2":76},{"style":"Normal","x1":64,"y1":96,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":20,"y2":64},{"style":"Normal","x1":20,"y1":72,"x2":20,"y2":24},{"style":"Normal","x1":12,"y1":72,"x2":12,"y2":24},{"style":"Normal","x1":20,"y1":72,"x2":12,"y2":72},{"style":"Normal","x1":20,"y1":24,"x2":12,"y2":24},{"style":"Normal","x1":20,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":12,"y1":48,"x2":0,"y2":48}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":68,"just":"Left","size":2}},"attrs":{"Value":"NPN","Prefix":"QN","Description":"Bipolar NPN transistor"},"unknown":0},"npn4":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":48,"x2":0,"y2":48},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":16,"y1":80,"x2":16,"y2":16},{"style":"Normal","x1":40,"y1":80,"x2":16,"y2":64},{"style":"Normal","x1":64,"y1":96,"x2":36,"y2":84},{"style":"Normal","x1":64,"y1":96,"x2":44,"y2":76},{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":16,"x2":48,"y2":28},{"style":"Normal","x1":64,"y1":48,"x2":56,"y2":40},{"style":"Normal","x1":40,"y1":32,"x2":56,"y2":20},{"style":"Normal","x1":48,"y1":44,"x2":64,"y2":32},{"style":"Normal","x1":48,"y1":44,"x2":48,"y2":28},{"style":"Normal","x1":64,"y1":32,"x2":48,"y2":28}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3},{"x":64,"y":48,"name":"S","order":4}],"windows":{"0":{"x":72,"y":32,"just":"Left","size":2},"3":{"x":72,"y":68,"just":"Left","size":2}},"attrs":{"Value":"NPN","Prefix":"QN","Description":"Bipolar NPN transistor with substrate node.  You would normally use this with your own .model statement."},"unknown":0},"pjf":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":16,"x2":16,"y2":80},{"style":"Normal","x1":48,"y1":72,"x2":48,"y2":96},{"style":"Normal","x1":16,"y1":72,"x2":48,"y2":72},{"style":"Normal","x1":48,"y1":24,"x2":48,"y2":0},{"style":"Normal","x1":16,"y1":24,"x2":48,"y2":24},{"style":"Normal","x1":12,"y1":64,"x2":16,"y2":64},{"style":"Normal","x1":12,"y1":68,"x2":0,"y2":64},{"style":"Normal","x1":12,"y1":60,"x2":0,"y2":64},{"style":"Normal","x1":12,"y1":60,"x2":12,"y2":68}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":64,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"PJF","Prefix":"JP","Description":"P-Channel JFET transistor"},"unknown":0},"pmos":{"type":"CELL","lines":[{"style":"Normal","x1":48,"y1":48,"x2":48,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":48,"y2":80},{"style":"Normal","x1":16,"y1":48,"x2":24,"y2":48},{"style":"Normal","x1":48,"y1":48,"x2":24,"y2":44},{"style":"Normal","x1":48,"y1":48,"x2":24,"y2":52},{"style":"Normal","x1":24,"y1":44,"x2":24,"y2":52},{"style":"Normal","x1":16,"y1":8,"x2":16,"y2":24},{"style":"Normal","x1":16,"y1":40,"x2":16,"y2":56},{"style":"Normal","x1":16,"y1":72,"x2":16,"y2":88},{"style":"Normal","x1":0,"y1":80,"x2":8,"y2":80},{"style":"Normal","x1":8,"y1":16,"x2":8,"y2":80},{"style":"Normal","x1":48,"y1":16,"x2":16,"y2":16},{"style":"Normal","x1":48,"y1":0,"x2":48,"y2":16}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":80,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"PMOS","Prefix":"MP","Description":"P-Channel MOSFET transistor"},"unknown":0},"pmos4":{"type":"CELL","lines":[{"style":"Normal","x1":48,"y1":80,"x2":48,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":48,"y2":80},{"style":"Normal","x1":16,"y1":48,"x2":24,"y2":48},{"style":"Normal","x1":48,"y1":48,"x2":24,"y2":44},{"style":"Normal","x1":48,"y1":48,"x2":24,"y2":52},{"style":"Normal","x1":24,"y1":44,"x2":24,"y2":52},{"style":"Normal","x1":16,"y1":8,"x2":16,"y2":24},{"style":"Normal","x1":16,"y1":40,"x2":16,"y2":56},{"style":"Normal","x1":16,"y1":72,"x2":16,"y2":88},{"style":"Normal","x1":0,"y1":80,"x2":8,"y2":80},{"style":"Normal","x1":8,"y1":16,"x2":8,"y2":80},{"style":"Normal","x1":48,"y1":16,"x2":16,"y2":16},{"style":"Normal","x1":48,"y1":0,"x2":48,"y2":16}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":48,"y":0,"name":"D","order":1},{"x":0,"y":80,"name":"G","order":2},{"x":48,"y":96,"name":"S","order":3},{"x":48,"y":48,"name":"B","order":4}],"windows":{"0":{"x":56,"y":32,"just":"Left","size":2},"3":{"x":56,"y":72,"just":"Left","size":2}},"attrs":{"Value":"PMOS","Prefix":"MP","Description":"P-Channel MOSFET transistor with explicit substrate connection(used for monolithic MOSFETS)"},"unknown":0},"pnp":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":64,"x2":44,"y2":76},{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":16,"y1":64,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":64,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":16,"y2":16},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":16,"y1":48,"x2":0,"y2":48}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3}],"windows":{"0":{"x":84,"y":32,"just":"Left","size":2},"3":{"x":84,"y":68,"just":"Left","size":2}},"attrs":{"Value":"PNP","Prefix":"QP","Description":"Bipolar PNP transistor"},"unknown":0},"pnp2":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":64,"x2":44,"y2":76},{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":16,"y1":64,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":64,"y2":96},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":12,"y1":48,"x2":0,"y2":48}],"rects":[{"style":"Normal","x1":16,"y1":72,"x2":12,"y2":24}],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3}],"windows":{"0":{"x":84,"y":32,"just":"Left","size":2},"3":{"x":84,"y":68,"just":"Left","size":2}},"attrs":{"Value":"PNP","Prefix":"QP","Description":"Bipolar PNP transistor"},"unknown":0},"pnp4":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":64,"x2":44,"y2":76},{"style":"Normal","x1":44,"y1":76,"x2":36,"y2":84},{"style":"Normal","x1":16,"y1":64,"x2":36,"y2":84},{"style":"Normal","x1":40,"y1":80,"x2":64,"y2":96},{"style":"Normal","x1":16,"y1":80,"x2":16,"y2":16},{"style":"Normal","x1":16,"y1":32,"x2":64,"y2":0},{"style":"Normal","x1":16,"y1":48,"x2":0,"y2":48},{"style":"Normal","x1":40,"y1":16,"x2":48,"y2":28},{"style":"Normal","x1":64,"y1":48,"x2":56,"y2":40},{"style":"Normal","x1":40,"y1":32,"x2":56,"y2":20},{"style":"Normal","x1":48,"y1":44,"x2":64,"y2":32},{"style":"Normal","x1":40,"y1":32,"x2":56,"y2":40},{"style":"Normal","x1":56,"y1":20,"x2":56,"y2":40}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":64,"y":0,"name":"C","order":1},{"x":0,"y":48,"name":"B","order":2},{"x":64,"y":96,"name":"E","order":3},{"x":64,"y":48,"name":"S","order":4}],"windows":{"0":{"x":72,"y":32,"just":"Left","size":2},"3":{"x":72,"y":68,"just":"Left","size":2}},"attrs":{"Value":"PNP","Prefix":"QP","Description":"Bipolar PNP transistor with substrate node.  You would normally use this with your own .model statement."},"unknown":0},"polcap":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":36,"x2":16,"y2":64},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":28},{"style":"Normal","x1":8,"y1":12,"x2":8,"y2":20},{"style":"Normal","x1":4,"y1":16,"x2":12,"y2":16},{"style":"Normal","x1":0,"y1":28,"x2":32,"y2":28}],"rects":[],"circles":[],"arcs":[{"style":"Normal","x1":-16,"y1":36,"x2":48,"y2":100,"xs":32,"ys":40,"xe":0,"ye":40}],"texts":[],"pins":[{"x":16,"y":0,"name":"A","order":1},{"x":16,"y":64,"name":"B","order":2}],"windows":{"0":{"x":24,"y":8,"just":"Left","size":2},"3":{"x":24,"y":57,"just":"Left","size":2}},"attrs":{"Value":"C","Prefix":"C","Description":"Polarized Capacitor"},"unknown":0},"res":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":88,"x2":16,"y2":96},{"style":"Normal","x1":0,"y1":80,"x2":16,"y2":88},{"style":"Normal","x1":32,"y1":64,"x2":0,"y2":80},{"style":"Normal","x1":0,"y1":48,"x2":32,"y2":64},{"style":"Normal","x1":32,"y1":32,"x2":0,"y2":48},{"style":"Normal","x1":16,"y1":16,"x2":16,"y2":24},{"style":"Normal","x1":16,"y1":24,"x2":32,"y2":32}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":16,"name":"A","order":1},{"x":16,"y":96,"name":"B","order":2}],"windows":{"0":{"x":36,"y":40,"just":"Left","size":2},"3":{"x":36,"y":76,"just":"Left","size":2}},"attrs":{"Value":"R","Prefix":"R","Description":"A resistor"},"unknown":0},"res2":{"type":"CELL","lines":[{"style":"Normal","x1":16,"y1":0,"x2":32,"y2":4},{"style":"Normal","x1":0,"y1":12,"x2":32,"y2":4},{"style":"Normal","x1":0,"y1":12,"x2":32,"y2":20},{"style":"Normal","x1":0,"y1":28,"x2":32,"y2":20},{"style":"Normal","x1":0,"y1":28,"x2":32,"y2":36},{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":36},{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":52},{"style":"Normal","x1":0,"y1":60,"x2":32,"y2":52},{"style":"Normal","x1":0,"y1":60,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"A","order":1},{"x":16,"y":64,"name":"B","order":2}],"windows":{"0":{"x":36,"y":16,"just":"Left","size":2},"3":{"x":36,"y":56,"just":"Left","size":2}},"attrs":{"Value":"R","Prefix":"R","Description":"A resistor"},"unknown":0},"schottky":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":36,"x2":4,"y2":36},{"style":"Normal","x1":0,"y1":44,"x2":0,"y2":36},{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":44},{"style":"Normal","x1":32,"y1":44,"x2":32,"y2":52},{"style":"Normal","x1":32,"y1":52,"x2":28,"y2":52},{"style":"Normal","x1":0,"y1":20,"x2":32,"y2":20},{"style":"Normal","x1":32,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":20},{"style":"Normal","x1":16,"y1":44,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"+","order":1},{"x":16,"y":64,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":64,"just":"Left","size":2}},"attrs":{"Value":"D","Prefix":"D","Description":"Schottky diode"},"unknown":0},"soatherm-heatsink":{"type":"CELL","lines":[{"style":"Normal","x1":48,"y1":64,"x2":-48,"y2":64},{"style":"Normal","x1":48,"y1":-7,"x2":32,"y2":-7},{"style":"Normal","x1":48,"y1":-16,"x2":48,"y2":-7},{"style":"Normal","x1":32,"y1":-16,"x2":48,"y2":-16},{"style":"Normal","x1":48,"y1":-40,"x2":32,"y2":-40},{"style":"Normal","x1":48,"y1":-48,"x2":48,"y2":-40},{"style":"Normal","x1":48,"y1":-64,"x2":-48,"y2":-64},{"style":"Normal","x1":32,"y1":-48,"x2":48,"y2":-48},{"style":"Normal","x1":32,"y1":-56,"x2":32,"y2":-48},{"style":"Normal","x1":48,"y1":-56,"x2":32,"y2":-56},{"style":"Normal","x1":48,"y1":-64,"x2":48,"y2":-56},{"style":"Normal","x1":-80,"y1":64,"x2":-48,"y2":64},{"style":"Normal","x1":-80,"y1":-64,"x2":-80,"y2":64},{"style":"Normal","x1":-48,"y1":-64,"x2":-80,"y2":-64},{"style":"Normal","x1":-48,"y1":64,"x2":-48,"y2":-64},{"style":"Normal","x1":48,"y1":-24,"x2":32,"y2":-24},{"style":"Normal","x1":48,"y1":-32,"x2":48,"y2":-24},{"style":"Normal","x1":32,"y1":-32,"x2":48,"y2":-32},{"style":"Normal","x1":32,"y1":-24,"x2":32,"y2":-16},{"style":"Normal","x1":32,"y1":-40,"x2":32,"y2":-32},{"style":"Normal","x1":48,"y1":55,"x2":48,"y2":64},{"style":"Normal","x1":32,"y1":55,"x2":48,"y2":55},{"style":"Normal","x1":48,"y1":31,"x2":32,"y2":31},{"style":"Normal","x1":48,"y1":23,"x2":48,"y2":31},{"style":"Normal","x1":32,"y1":23,"x2":48,"y2":23},{"style":"Normal","x1":32,"y1":15,"x2":32,"y2":23},{"style":"Normal","x1":48,"y1":15,"x2":32,"y2":15},{"style":"Normal","x1":48,"y1":7,"x2":48,"y2":15},{"style":"Normal","x1":48,"y1":47,"x2":32,"y2":47},{"style":"Normal","x1":48,"y1":39,"x2":48,"y2":47},{"style":"Normal","x1":32,"y1":39,"x2":48,"y2":39},{"style":"Normal","x1":32,"y1":47,"x2":32,"y2":55},{"style":"Normal","x1":32,"y1":31,"x2":32,"y2":39},{"style":"Normal","x1":48,"y1":7,"x2":32,"y2":7},{"style":"Normal","x1":32,"y1":-7,"x2":32,"y2":7},{"style":"Normal","x1":-48,"y1":-96,"x2":-80,"y2":-64},{"style":"Normal","x1":-16,"y1":-96,"x2":-48,"y2":-96},{"style":"Normal","x1":-48,"y1":-64,"x2":-16,"y2":-96},{"style":"Normal","x1":80,"y1":-96,"x2":-16,"y2":-96},{"style":"Normal","x1":48,"y1":-64,"x2":80,"y2":-96},{"style":"Normal","x1":80,"y1":-88,"x2":48,"y2":-56},{"style":"Normal","x1":80,"y1":-80,"x2":48,"y2":-48},{"style":"Normal","x1":80,"y1":-72,"x2":48,"y2":-40},{"style":"Normal","x1":80,"y1":-64,"x2":48,"y2":-32},{"style":"Normal","x1":80,"y1":-56,"x2":48,"y2":-24},{"style":"Normal","x1":80,"y1":-48,"x2":48,"y2":-16},{"style":"Normal","x1":80,"y1":-39,"x2":48,"y2":-7},{"style":"Normal","x1":80,"y1":-25,"x2":48,"y2":7},{"style":"Normal","x1":80,"y1":-17,"x2":48,"y2":15},{"style":"Normal","x1":80,"y1":-9,"x2":48,"y2":23},{"style":"Normal","x1":80,"y1":-1,"x2":48,"y2":31},{"style":"Normal","x1":80,"y1":7,"x2":48,"y2":39},{"style":"Normal","x1":80,"y1":15,"x2":48,"y2":47},{"style":"Normal","x1":80,"y1":23,"x2":48,"y2":55},{"style":"Normal","x1":80,"y1":32,"x2":48,"y2":64},{"style":"Normal","x1":80,"y1":-88,"x2":80,"y2":-96},{"style":"Normal","x1":80,"y1":-72,"x2":80,"y2":-80},{"style":"Normal","x1":80,"y1":-56,"x2":80,"y2":-64},{"style":"Normal","x1":80,"y1":-39,"x2":80,"y2":-48},{"style":"Normal","x1":80,"y1":-17,"x2":80,"y2":-25},{"style":"Normal","x1":80,"y1":-1,"x2":80,"y2":-9},{"style":"Normal","x1":80,"y1":15,"x2":80,"y2":7},{"style":"Normal","x1":80,"y1":32,"x2":80,"y2":23},{"style":"Normal","x1":40,"y1":-56,"x2":32,"y2":-48},{"style":"Normal","x1":40,"y1":-40,"x2":32,"y2":-32},{"style":"Normal","x1":40,"y1":-24,"x2":32,"y2":-16},{"style":"Normal","x1":46,"y1":-7,"x2":32,"y2":7},{"style":"Normal","x1":40,"y1":15,"x2":32,"y2":23},{"style":"Normal","x1":40,"y1":31,"x2":32,"y2":39},{"style":"Normal","x1":40,"y1":47,"x2":32,"y2":55},{"style":"Normal","x1":72,"y1":-80,"x2":80,"y2":-80},{"style":"Normal","x1":72,"y1":-64,"x2":80,"y2":-64},{"style":"Normal","x1":72,"y1":-48,"x2":80,"y2":-48},{"style":"Normal","x1":72,"y1":23,"x2":80,"y2":23},{"style":"Normal","x1":72,"y1":7,"x2":80,"y2":7},{"style":"Normal","x1":72,"y1":-9,"x2":80,"y2":-9},{"style":"Normal","x1":66,"y1":-25,"x2":80,"y2":-25}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":-80,"y":0,"name":"Tc","order":1},{"x":-48,"y":0,"name":"Tinterface","order":2},{"x":48,"y":0,"name":"Tfin","order":3}],"windows":{"0":{"x":0,"y":-64,"just":"Bottom","size":2},"3":{"x":97,"y":29,"just":"Left","size":2},"38":{"x":97,"y":-28,"just":"Left","size":2},"123":{"x":97,"y":52,"just":"Left","size":2}},"attrs":{"Value":"Rtheta=10 Tambient=85","Value2":"Area_Contact_mm2=100 Volume_mm3=1000","SpiceModel":"copper","Prefix":"X","ModelFile":"SOAtherm-HeatSink.lib","Description":"Heat Sink Thermal Model"},"unknown":0},"soatherm-nmos":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":0,"x2":0,"y2":48},{"style":"Normal","x1":-32,"y1":32,"x2":0,"y2":32},{"style":"Normal","x1":-8,"y1":0,"x2":0,"y2":0},{"style":"Normal","x1":-32,"y1":0,"x2":-8,"y2":-4},{"style":"Normal","x1":-32,"y1":0,"x2":-8,"y2":4},{"style":"Normal","x1":-8,"y1":-4,"x2":-8,"y2":4},{"style":"Normal","x1":-32,"y1":-40,"x2":-32,"y2":-24},{"style":"Normal","x1":-32,"y1":-8,"x2":-32,"y2":8},{"style":"Normal","x1":-32,"y1":24,"x2":-32,"y2":40},{"style":"Normal","x1":-48,"y1":32,"x2":-40,"y2":32},{"style":"Normal","x1":-40,"y1":-32,"x2":-40,"y2":32},{"style":"Normal","x1":0,"y1":-32,"x2":-32,"y2":-32},{"style":"Normal","x1":0,"y1":-48,"x2":0,"y2":-32},{"style":"Normal","x1":0,"y1":64,"x2":-57,"y2":64},{"style":"Normal","x1":64,"y1":-103,"x2":64,"y2":-57},{"style":"Normal","x1":-57,"y1":-112,"x2":56,"y2":-112},{"style":"Normal","x1":-64,"y1":56,"x2":-64,"y2":-104},{"style":"Normal","x1":6,"y1":56,"x2":6,"y2":-40},{"style":"Normal","x1":16,"y1":-48,"x2":56,"y2":-48},{"style":"Normal","x1":0,"y1":-64,"x2":0,"y2":-48},{"style":"Normal","x1":0,"y1":-112,"x2":0,"y2":-96},{"style":"Normal","x1":10,"y1":-80,"x2":0,"y2":-80},{"style":"Normal","x1":10,"y1":-75,"x2":10,"y2":-85},{"style":"Normal","x1":-10,"y1":-80,"x2":0,"y2":-80},{"style":"Normal","x1":-10,"y1":-85,"x2":-10,"y2":-75},{"style":"Normal","x1":-64,"y1":32,"x2":-48,"y2":32},{"style":"Normal","x1":0,"y1":64,"x2":0,"y2":48}],"rects":[],"circles":[{"style":"Normal","x1":16,"y1":-64,"x2":-16,"y2":-96}],"arcs":[{"style":"Normal","x1":-64,"y1":64,"x2":-50,"y2":48,"xs":-64,"ys":56,"xe":-57,"ye":64},{"style":"Normal","x1":6,"y1":64,"x2":-7,"y2":48,"xs":0,"ys":64,"xe":6,"ye":56},{"style":"Normal","x1":6,"y1":-48,"x2":25,"y2":-32,"xs":16,"ys":-48,"xe":6,"ye":-40},{"style":"Normal","x1":64,"y1":-48,"x2":48,"y2":-64,"xs":56,"ys":-48,"xe":64,"ye":-57},{"style":"Normal","x1":-64,"y1":-112,"x2":-50,"y2":-96,"xs":-57,"ys":-112,"xe":-64,"ye":-104},{"style":"Normal","x1":64,"y1":-112,"x2":48,"y2":-96,"xs":64,"ys":-103,"xe":56,"ye":-112}],"texts":[],"pins":[{"x":0,"y":-112,"name":"D","order":1},{"x":-64,"y":32,"name":"G","order":2},{"x":0,"y":64,"name":"S","order":3},{"x":0,"y":-48,"name":"D2","order":4},{"x":-48,"y":32,"name":"G2","order":5},{"x":0,"y":48,"name":"S2","order":6},{"x":64,"y":-64,"name":"Tj","order":7},{"x":64,"y":-96,"name":"Tc","order":8}],"windows":{"0":{"x":-8,"y":-128,"just":"Right","size":2},"38":{"x":11,"y":75,"just":"Left","size":2}},"attrs":{"SpiceModel":"BSC600N25NS3","Description":"SOAtherm Thermal Model for N-channel power MOSFET.  Used with a VDMOS device.  See the LTspice SOAtherm Tutorial on www.analog.com for details or see the example in examples/jigs directory.  Intended to be useful for hotswap simulation","ModelFile":"SOAtherm-NMOS.lib","Prefix":"X","Value2":"Tambient=85"},"unknown":0},"soatherm-pcb":{"type":"CELL","lines":[{"style":"Normal","x1":-79,"y1":-40,"x2":-112,"y2":40},{"style":"Normal","x1":112,"y1":-40,"x2":-79,"y2":-40},{"style":"Normal","x1":80,"y1":40,"x2":112,"y2":-40},{"style":"Normal","x1":-112,"y1":40,"x2":80,"y2":40},{"style":"Normal","x1":-112,"y1":48,"x2":-112,"y2":40},{"style":"Normal","x1":80,"y1":48,"x2":-112,"y2":48},{"style":"Normal","x1":80,"y1":48,"x2":80,"y2":40},{"style":"Normal","x1":112,"y1":-32,"x2":80,"y2":48},{"style":"Normal","x1":112,"y1":-40,"x2":112,"y2":-32}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":0,"y":0,"name":"Tcenter","order":1}],"windows":{"0":{"x":16,"y":-40,"just":"Bottom","size":2},"3":{"x":-112,"y":64,"just":"Left","size":2},"123":{"x":-112,"y":96,"just":"Left","size":2}},"attrs":{"Value":"Area_Contact_mm2=100 Area_PCB_mm2=2500 Copper_Thickness_oz=1","Value2":"Tambient=85 LFM=100 PCB_FR4_Thickness_mm=1.5","Prefix":"X","SpiceModel":"TopsideCopper","ModelFile":"SOAtherm-PCB.lib","Description":"PCB Thermal Model"},"unknown":0},"sw":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":32,"x2":-32,"y2":32},{"style":"Normal","x1":-32,"y1":32,"x2":-24,"y2":36},{"style":"Normal","x1":-48,"y1":80,"x2":-32,"y2":80},{"style":"Normal","x1":-32,"y1":80,"x2":-24,"y2":76},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":72},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":36},{"style":"Normal","x1":0,"y1":36,"x2":20,"y2":60},{"style":"Normal","x1":-48,"y1":72,"x2":-40,"y2":72},{"style":"Normal","x1":-44,"y1":76,"x2":-44,"y2":68},{"style":"Normal","x1":-48,"y1":40,"x2":-40,"y2":40}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88},{"style":"Normal","x1":-4,"y1":76,"x2":4,"y2":68},{"style":"Normal","x1":16,"y1":56,"x2":24,"y2":64}],"arcs":[],"texts":[],"pins":[{"x":0,"y":16,"name":"A","order":1},{"x":0,"y":96,"name":"B","order":2},{"x":-48,"y":80,"name":"NC+","order":3},{"x":-48,"y":32,"name":"NC-","order":4}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"SW","Prefix":"S","Description":"Voltage controlled switch"},"unknown":0},"tline":{"type":"CELL","lines":[{"style":"Normal","x1":-48,"y1":16,"x2":48,"y2":16},{"style":"Normal","x1":-32,"y1":8,"x2":32,"y2":8},{"style":"Normal","x1":-32,"y1":-8,"x2":32,"y2":-8},{"style":"Normal","x1":-48,"y1":-16,"x2":48,"y2":-16},{"style":"Normal","x1":-48,"y1":16,"x2":-32,"y2":8},{"style":"Normal","x1":-48,"y1":-16,"x2":-32,"y2":-8},{"style":"Normal","x1":48,"y1":16,"x2":32,"y2":8},{"style":"Normal","x1":48,"y1":-16,"x2":32,"y2":-8}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":-48,"y":-16,"name":"I1","order":1},{"x":-48,"y":16,"name":"R1","order":2},{"x":48,"y":-16,"name":"I2","order":3},{"x":48,"y":16,"name":"R2","order":4}],"windows":{"0":{"x":0,"y":-16,"just":"Bottom","size":2},"3":{"x":0,"y":16,"just":"Top","size":2}},"attrs":{"Value":"Td=50n Z0=50","Prefix":"T","Description":"Ideal Lossless Transmission Line"},"unknown":0},"tvsdiode":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":32,"x2":-4,"y2":36},{"style":"Normal","x1":32,"y1":32,"x2":36,"y2":28},{"style":"Normal","x1":0,"y1":32,"x2":32,"y2":32},{"style":"Normal","x1":0,"y1":8,"x2":32,"y2":8},{"style":"Normal","x1":32,"y1":8,"x2":16,"y2":32},{"style":"Normal","x1":0,"y1":8,"x2":16,"y2":32},{"style":"Normal","x1":0,"y1":56,"x2":32,"y2":56},{"style":"Normal","x1":32,"y1":56,"x2":16,"y2":32},{"style":"Normal","x1":0,"y1":56,"x2":16,"y2":32},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":8},{"style":"Normal","x1":16,"y1":56,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"+","order":1},{"x":16,"y":64,"name":"-","order":2}],"windows":{"0":{"x":24,"y":-2,"just":"Left","size":2},"3":{"x":24,"y":65,"just":"Left","size":2}},"attrs":{"Value":"D","Prefix":"D","Description":"Zener Diode"},"unknown":0},"varactor":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":36,"x2":32,"y2":36},{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":44},{"style":"Normal","x1":0,"y1":16,"x2":32,"y2":16},{"style":"Normal","x1":32,"y1":16,"x2":16,"y2":36},{"style":"Normal","x1":0,"y1":16,"x2":16,"y2":36},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":16},{"style":"Normal","x1":16,"y1":44,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"+","order":1},{"x":16,"y":64,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":64,"just":"Left","size":2}},"attrs":{"Value":"D","Prefix":"D","Description":"Diode"},"unknown":0},"voltage":{"type":"CELL","lines":[{"style":"Normal","x1":-8,"y1":36,"x2":8,"y2":36},{"style":"Normal","x1":-8,"y1":76,"x2":8,"y2":76},{"style":"Normal","x1":0,"y1":28,"x2":0,"y2":44},{"style":"Normal","x1":0,"y1":96,"x2":0,"y2":88},{"style":"Normal","x1":0,"y1":16,"x2":0,"y2":24}],"rects":[],"circles":[{"style":"Normal","x1":-32,"y1":24,"x2":32,"y2":88}],"arcs":[],"texts":[],"pins":[{"x":0,"y":16,"name":"+","order":1},{"x":0,"y":96,"name":"-","order":2}],"windows":{"0":{"x":24,"y":16,"just":"Left","size":2},"3":{"x":24,"y":96,"just":"Left","size":2}},"attrs":{"Value":"V","Prefix":"V","Description":"Voltage Source, either DC, AC, PULSE, SINE, PWL, EXP, or SFFM"},"unknown":0},"zener":{"type":"CELL","lines":[{"style":"Normal","x1":0,"y1":44,"x2":-4,"y2":48},{"style":"Normal","x1":32,"y1":44,"x2":36,"y2":40},{"style":"Normal","x1":0,"y1":44,"x2":32,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":32,"y2":20},{"style":"Normal","x1":32,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":0,"y1":20,"x2":16,"y2":44},{"style":"Normal","x1":16,"y1":0,"x2":16,"y2":20},{"style":"Normal","x1":16,"y1":44,"x2":16,"y2":64}],"rects":[],"circles":[],"arcs":[],"texts":[],"pins":[{"x":16,"y":0,"name":"+","order":1},{"x":16,"y":64,"name":"-","order":2}],"windows":{"0":{"x":24,"y":0,"just":"Left","size":2},"3":{"x":24,"y":64,"just":"Left","size":2}},"attrs":{"Value":"D","Prefix":"D","Description":"Zener Diode"},"unknown":0}};
+</script>
+<script type="module">
+// ---- src/tokenize.js ----
+function toLines(text) {
+  return text.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l));
+}
+
+function toWords(line) {
+  const t = line.trim();
+  return t === '' ? [] : t.split(/\s+/);
+}
+
+function toInt(v) {
+  return parseInt(v, 10);
+}
+
+// Returns everything from word index `i` onward, with original inner spacing.
+// Needed because TEXT bodies and SYMATTR values contain spaces.
+function restFrom(raw, i) {
+  const t = raw.trim();
+  let idx = 0;
+  for (let k = 0; k < i; k++) {
+    while (idx < t.length && !/\s/.test(t[idx])) idx++;
+    while (idx < t.length && /\s/.test(t[idx])) idx++;
+  }
+  return t.slice(idx);
+}
+
+// ---- src/decode.js ----
+// LTspice writes cp1252 by default (0xB5 = micro sign) and UTF-16 with a BOM
+// in some versions. Decoding as UTF-8 corrupts component values.
+function decode(buf) {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+
+  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(b.subarray(2));
+  }
+  if (b.length >= 2 && b[0] === 0xfe && b[1] === 0xff) {
+    // TextDecoder support for 'utf-16be' is inconsistent across runtimes,
+    // so byte-swap into LE rather than relying on it.
+    const body = b.subarray(2);
+    const swapped = new Uint8Array(body.length);
+    for (let i = 0; i + 1 < body.length; i += 2) {
+      swapped[i] = body[i + 1];
+      swapped[i + 1] = body[i];
+    }
+    return new TextDecoder('utf-16le').decode(swapped);
+  }
+  // LTspice also writes UTF-16LE with no BOM. Every .asc/.asy begins with the
+  // ASCII text "Version", so a NUL in the second byte (or the first) is a
+  // reliable signal — cp1252 text never starts that way.
+  if (b.length >= 2 && b[0] !== 0x00 && b[1] === 0x00) {
+    return new TextDecoder('utf-16le').decode(b);
+  }
+  if (b.length >= 2 && b[0] === 0x00 && b[1] !== 0x00) {
+    const swapped = new Uint8Array(b.length);
+    for (let i = 0; i + 1 < b.length; i += 2) {
+      swapped[i] = b[i + 1];
+      swapped[i + 1] = b[i];
+    }
+    return new TextDecoder('utf-16le').decode(swapped);
+  }
+  return new TextDecoder('windows-1252').decode(b);
+}
+
+// ---- src/parse-asy.js ----
+function parseAsy(text) {
+  const sym = {
+    type: '', lines: [], rects: [], circles: [], arcs: [], texts: [],
+    pins: [], windows: {}, attrs: {}, unknown: 0,
+  };
+
+  for (const raw of toLines(text)) {
+    const w = toWords(raw);
+    if (w.length === 0) continue;
+    const kw = w[0];
+
+    switch (kw) {
+      case 'Version':
+        break;
+      case 'SymbolType':
+        sym.type = w[1] ?? '';
+        break;
+      case 'LINE':
+        sym.lines.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
+        break;
+      case 'RECTANGLE':
+        sym.rects.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
+        break;
+      case 'CIRCLE':
+        sym.circles.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
+        break;
+      case 'ARC':
+        sym.arcs.push({
+          style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]),
+          xs: toInt(w[6]), ys: toInt(w[7]), xe: toInt(w[8]), ye: toInt(w[9]),
+        });
+        break;
+      case 'TEXT':
+        sym.texts.push({
+          x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]),
+          text: restFrom(raw, 5),
+        });
+        break;
+      case 'WINDOW':
+        sym.windows[toInt(w[1])] = { x: toInt(w[2]), y: toInt(w[3]), just: w[4], size: toInt(w[5]) };
+        break;
+      case 'SYMATTR':
+        sym.attrs[w[1]] = restFrom(raw, 2);
+        break;
+      case 'PIN':
+        sym.pins.push({ x: toInt(w[1]), y: toInt(w[2]), name: '', order: 0 });
+        break;
+      case 'PINATTR': {
+        const pin = sym.pins[sym.pins.length - 1];
+        if (!pin) { sym.unknown += 1; break; }
+        if (w[1] === 'PinName') pin.name = restFrom(raw, 2);
+        else if (w[1] === 'SpiceOrder') pin.order = toInt(w[2]);
+        break;
+      }
+      default:
+        sym.unknown += 1;
+    }
+  }
+  return sym;
+}
+
+// ---- src/parse-asc.js ----
+function parseAsc(text) {
+  const model = {
+    sheet: { n: 1, w: 0, h: 0 },
+    wires: [], flags: [], dataflags: [], symbols: [], texts: [], shapes: [],
+    unknown: 0,
+  };
+  let current = null; // most recent SYMBOL, target for WINDOW/SYMATTR
+
+  for (const raw of toLines(text)) {
+    const w = toWords(raw);
+    if (w.length === 0) continue;
+
+    switch (w[0]) {
+      case 'Version':
+        break;
+      case 'SHEET':
+        model.sheet = { n: toInt(w[1]), w: toInt(w[2]), h: toInt(w[3]) };
+        break;
+      case 'WIRE':
+        model.wires.push({ x1: toInt(w[1]), y1: toInt(w[2]), x2: toInt(w[3]), y2: toInt(w[4]) });
+        break;
+      case 'FLAG':
+        model.flags.push({ x: toInt(w[1]), y: toInt(w[2]), name: restFrom(raw, 3) });
+        break;
+      case 'DATAFLAG':
+        model.dataflags.push({
+          x: toInt(w[1]), y: toInt(w[2]), expr: restFrom(raw, 3).replace(/^"|"$/g, ''),
+        });
+        break;
+      case 'SYMBOL':
+        current = {
+          name: w[1], x: toInt(w[2]), y: toInt(w[3]), rot: w[4] ?? 'R0',
+          attrs: {}, windows: {},
+        };
+        model.symbols.push(current);
+        break;
+      case 'WINDOW':
+        if (current) {
+          current.windows[toInt(w[1])] =
+            { x: toInt(w[2]), y: toInt(w[3]), just: w[4], size: toInt(w[5]) };
+        } else model.unknown += 1;
+        break;
+      case 'SYMATTR':
+        if (current) current.attrs[w[1]] = restFrom(raw, 2);
+        else model.unknown += 1;
+        break;
+      case 'TEXT': {
+        const body = restFrom(raw, 5);
+        const kind = body.startsWith('!') ? 'directive'
+                   : body.startsWith(';') ? 'comment' : 'comment';
+        model.texts.push({
+          x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]), kind,
+          // LTspice stores line breaks as the two characters \ and n.
+          lines: body.replace(/^[!;]/, '').split('\\n'),
+        });
+        break;
+      }
+      case 'RECTANGLE':
+        model.shapes.push({
+          type: 'rect', style: w[1],
+          x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]),
+        });
+        break;
+      default:
+        model.unknown += 1;
+    }
+  }
+  return model;
+}
+
+// ---- src/transform.js ----
+// Verified empirically against both workspace schematics by testing that every
+// transformed symbol pin coincides with a wire endpoint, flag, or other pin
+// (152/152). Do not re-derive these from first principles.
+const ROT = {
+  R0:   (x, y) => [x, y],
+  R90:  (x, y) => [-y, x],
+  R180: (x, y) => [-x, -y],
+  R270: (x, y) => [y, -x],
+  M0:   (x, y) => [-x, y],
+  M90:  (x, y) => [y, x],
+  M180: (x, y) => [x, -y],
+  M270: (x, y) => [-y, -x],
+};
+
+function place(inst, px, py) {
+  const fn = ROT[inst.rot] ?? ROT.R0;
+  const [dx, dy] = fn(px, py);
+  return [inst.x + dx, inst.y + dy];
+}
+
+function emptyBox() {
+  return { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+}
+
+function unionBox(box, x, y) {
+  if (x < box.minX) box.minX = x;
+  if (y < box.minY) box.minY = y;
+  if (x > box.maxX) box.maxX = x;
+  if (y > box.maxY) box.maxY = y;
+  return box;
+}
+
+// ---- src/render.js ----
+const MARGIN = 48;
+const DASH = { Dot: '2,6', ShortDash: '8,6', Dash: '16,8', LongDash: '24,8' };
+
+function getSymbol(map, name) {
+  if (!name) return undefined;
+  return map[name] ?? map[name.toLowerCase()];
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function dash(style) {
+  const d = DASH[style];
+  return d ? ` stroke-dasharray="${d}"` : '';
+}
+
+function computeBounds(model, symbolMap) {
+  const b = emptyBox();
+  for (const w of model.wires) {
+    unionBox(b, w.x1, w.y1);
+    unionBox(b, w.x2, w.y2);
+  }
+  for (const f of model.flags) unionBox(b, f.x, f.y);
+  for (const d of model.dataflags) unionBox(b, d.x, d.y);
+  for (const t of model.texts) unionBox(b, t.x, t.y);
+  for (const s of model.shapes) {
+    unionBox(b, s.x1, s.y1);
+    unionBox(b, s.x2, s.y2);
+  }
+  for (const inst of model.symbols) {
+    const def = getSymbol(symbolMap, inst.name);
+    if (!def) {
+      unionBox(b, inst.x - 32, inst.y - 32);
+      unionBox(b, inst.x + 64, inst.y + 64);
+      continue;
+    }
+    for (const p of allSymbolPoints(def)) {
+      const [x, y] = place(inst, p[0], p[1]);
+      unionBox(b, x, y);
+    }
+  }
+  if (!isFinite(b.minX)) return { minX: 0, minY: 0, maxX: 100, maxY: 100 };
+  return b;
+}
+
+function allSymbolPoints(def) {
+  const pts = [];
+  for (const l of def.lines) pts.push([l.x1, l.y1], [l.x2, l.y2]);
+  for (const r of def.rects) pts.push([r.x1, r.y1], [r.x2, r.y2]);
+  for (const c of def.circles) pts.push([c.x1, c.y1], [c.x2, c.y2]);
+  for (const a of def.arcs) pts.push([a.x1, a.y1], [a.x2, a.y2]);
+  for (const p of def.pins) pts.push([p.x, p.y]);
+  return pts;
+}
+
+function junctionPoints(model, symbolMap) {
+  const count = new Map();
+  const bump = (x, y) => {
+    const k = `${x},${y}`;
+    count.set(k, (count.get(k) ?? 0) + 1);
+  };
+  for (const w of model.wires) {
+    bump(w.x1, w.y1);
+    bump(w.x2, w.y2);
+  }
+  for (const inst of model.symbols) {
+    const def = getSymbol(symbolMap, inst.name);
+    if (!def) continue;
+    for (const p of def.pins) {
+      const [x, y] = place(inst, p.x, p.y);
+      bump(x, y);
+    }
+  }
+  return [...count.entries()].filter(([, n]) => n >= 3).map(([k]) => k);
+}
+
+function renderSymbolBody(def, inst) {
+  const out = [];
+  const P = (x, y) => place(inst, x, y);
+
+  for (const l of def.lines) {
+    const [x1, y1] = P(l.x1, l.y1);
+    const [x2, y2] = P(l.x2, l.y2);
+    out.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${dash(l.style)}/>`);
+  }
+  for (const r of def.rects) {
+    const [ax, ay] = P(r.x1, r.y1);
+    const [bx, by] = P(r.x2, r.y2);
+    out.push(`<rect x="${Math.min(ax, bx)}" y="${Math.min(ay, by)}" ` +
+      `width="${Math.abs(bx - ax)}" height="${Math.abs(by - ay)}" ` +
+      `fill="none"${dash(r.style)}/>`);
+  }
+  for (const c of def.circles) {
+    // CIRCLE gives a bounding box. Transform its centre; radii swap under the
+    // 90-degree orientations, which is what applying ROT to the half-extents does.
+    const cx = (c.x1 + c.x2) / 2, cy = (c.y1 + c.y2) / 2;
+    const [tcx, tcy] = P(cx, cy);
+    const [hx, hy] = ROT[inst.rot ?? 'R0'](Math.abs(c.x2 - c.x1) / 2, Math.abs(c.y2 - c.y1) / 2);
+    out.push(`<ellipse cx="${tcx}" cy="${tcy}" rx="${Math.abs(hx)}" ry="${Math.abs(hy)}" ` +
+      `fill="none"${dash(c.style)}/>`);
+  }
+  for (const a of def.arcs) out.push(renderArc(a, inst));
+  return out;
+}
+
+// ARC carries a bounding box plus start/end hint points. The hints are not
+// guaranteed to lie exactly on the ellipse, so project them by angle and
+// rebuild exact endpoints before emitting an elliptical-arc path.
+function renderArc(a, inst) {
+  const cx = (a.x1 + a.x2) / 2, cy = (a.y1 + a.y2) / 2;
+  const rx = Math.abs(a.x2 - a.x1) / 2, ry = Math.abs(a.y2 - a.y1) / 2;
+  if (rx === 0 || ry === 0) return '';
+
+  const ang = (px, py) => Math.atan2((py - cy) / ry, (px - cx) / rx);
+  const a0 = ang(a.xs, a.ys);
+  const a1 = ang(a.xe, a.ye);
+  const onEllipse = (t) => [cx + rx * Math.cos(t), cy + ry * Math.sin(t)];
+
+  const [sx, sy] = onEllipse(a0);
+  const [ex, ey] = onEllipse(a1);
+
+  let delta = a1 - a0;
+  while (delta <= 0) delta += Math.PI * 2;
+  const largeArc = delta > Math.PI ? 1 : 0;
+
+  const [tsx, tsy] = place(inst, sx, sy);
+  const [tex, tey] = place(inst, ex, ey);
+  // Increasing theta is clockwise in this y-down parametrisation, which is
+  // SVG sweep-flag 1; largeArc is computed against that same direction.
+  // A mirrored instance flips the handedness, so it takes the opposite flag.
+  const mirrored = (inst.rot ?? 'R0').startsWith('M');
+  const sweep = mirrored ? 0 : 1;
+
+  // Radii swap under 90-degree orientations, same treatment as the CIRCLE
+  // branch: run the untransformed half-extents through ROT and take abs.
+  // Only the emitted radii change; angle maths and endpoints stay on the
+  // untransformed ellipse.
+  const [hx, hy] = ROT[inst.rot ?? 'R0'](rx, ry);
+  const erx = Math.abs(hx), ery = Math.abs(hy);
+
+  return `<path d="M ${tsx} ${tsy} A ${erx} ${ery} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
+    `fill="none"${dash(a.style)}/>`;
+}
+
+function renderPlaceholder(inst) {
+  const w = 96, h = 96;
+  const label = [inst.attrs.InstName, inst.name, inst.attrs.Value]
+    .filter(Boolean).map(esc);
+  const rows = label.map((t, i) =>
+    `<text x="${inst.x + w / 2}" y="${inst.y + 24 + i * 20}" text-anchor="middle" ` +
+    `class="lbl">${t}</text>`).join('');
+  return `<g class="placeholder"><rect x="${inst.x}" y="${inst.y}" width="${w}" ` +
+    `height="${h}" fill="none" stroke-dasharray="8,6"/>${rows}</g>`;
+}
+
+function renderSvg(model, symbolMap, opts = {}) {
+  const annotations = opts.annotations !== false;
+  const b = computeBounds(model, symbolMap);
+  const x = b.minX - MARGIN, y = b.minY - MARGIN;
+  const w = (b.maxX - b.minX) + MARGIN * 2;
+  const h = (b.maxY - b.minY) + MARGIN * 2;
+
+  const body = [];
+
+  for (const s of model.shapes) {
+    body.push(`<rect x="${Math.min(s.x1, s.x2)}" y="${Math.min(s.y1, s.y2)}" ` +
+      `width="${Math.abs(s.x2 - s.x1)}" height="${Math.abs(s.y2 - s.y1)}" ` +
+      `fill="none" class="shape"${dash(s.style)}/>`);
+  }
+
+  for (const wire of model.wires) {
+    body.push(`<line x1="${wire.x1}" y1="${wire.y1}" x2="${wire.x2}" y2="${wire.y2}"/>`);
+  }
+
+  for (const inst of model.symbols) {
+    const def = getSymbol(symbolMap, inst.name);
+    if (!def) { body.push(renderPlaceholder(inst)); continue; }
+    body.push(`<g class="sym">${renderSymbolBody(def, inst).join('')}</g>`);
+  }
+
+  for (const k of junctionPoints(model, symbolMap)) {
+    const [jx, jy] = k.split(',');
+    body.push(`<circle cx="${jx}" cy="${jy}" r="4" class="junction"/>`);
+  }
+
+  // TEXT LAYER INSERTED IN TASK 7
+  body.push(renderTextLayer(model, symbolMap, annotations));
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}">
+<style>
+  line, rect, ellipse, path, circle { stroke: var(--ink, #111); fill: none;
+    stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  circle.junction { fill: var(--ink, #111); stroke: none; }
+  text { fill: var(--ink, #111); stroke: none;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .placeholder rect { stroke: var(--warn, #b45309); }
+  .placeholder text { fill: var(--warn, #b45309); }
+  .gnd { stroke: var(--ink, #111); }
+  .net { fill: var(--net, #1d4ed8); }
+  .directive { fill: var(--ink, #111); }
+  .comment { fill: var(--muted, #4b5563); }
+  .dataflag { fill: var(--probe, #047857); }
+</style>
+<g id="root">${body.join('\n')}</g>
+</svg>`;
+}
+
+// LTspice text size codes 0-7, expressed in schematic units. These are an
+// initial calibration; Task 11 tunes them against the real files.
+const SIZE = [10, 13, 16, 20, 26, 34, 48, 64];
+
+function justAttrs(just = 'Left') {
+  const rotate = just.startsWith('V');
+  const base = rotate ? just.slice(1) : just;
+  const anchor =
+    base === 'Right' ? 'end' :
+    base === 'Center' ? 'middle' :
+    base === 'Top' || base === 'Bottom' ? 'middle' : 'start';
+  const baseline =
+    base === 'Top' ? 'hanging' :
+    base === 'Bottom' ? 'auto' : 'central';
+  return { anchor, baseline, rotate };
+}
+
+// The ground symbol has no .asy file, so it is drawn directly. A stub down
+// from the flag point into an open triangle, in LTspice's grid units.
+const GROUND_PATH = 'M 0 0 L 0 12 M -16 12 L 16 12 L 0 28 Z';
+
+function textEl(x, y, just, sizeCode, lines, cls) {
+  const { anchor, baseline, rotate } = justAttrs(just);
+  const fs = SIZE[sizeCode] ?? SIZE[2];
+  // Text is never mirrored: only rotation is applied, never a negative scale.
+  const tf = rotate ? ` transform="rotate(-90 ${x} ${y})"` : '';
+  const body = lines.length === 1
+    ? esc(lines[0])
+    : lines.map((l, i) =>
+        `<tspan x="${x}" dy="${i === 0 ? 0 : fs * 1.2}">${esc(l)}</tspan>`).join('');
+  return `<text x="${x}" y="${y}" font-size="${fs}" text-anchor="${anchor}" ` +
+    `dominant-baseline="${baseline}" class="${cls}"${tf}>${body}</text>`;
+}
+
+// WINDOW id -> the SYMATTR key it positions.
+const WINDOW_ATTR = { 0: 'InstName', 3: 'Value', 123: 'Value2', 39: 'SpiceLine' };
+
+function renderInstanceText(inst, def) {
+  const out = [];
+  for (const [idStr, key] of Object.entries(WINDOW_ATTR)) {
+    const id = Number(idStr);
+    const value = inst.attrs[key];
+    if (!value) continue;
+
+    // Instance WINDOW overrides the symbol's default WINDOW.
+    const win = inst.windows[id] ?? def.windows[id];
+    if (!win) continue;
+    if (win.size === 0) continue; // size 0 means hidden
+
+    // WINDOW offsets are read as pre-transform symbol-local coordinates.
+    // Task 11 calibrates this against the rendered output.
+    const [x, y] = place(inst, win.x, win.y);
+    out.push(textEl(x, y, win.just, win.size, [value], 'lbl'));
+  }
+  return out.join('');
+}
+
+function renderTextLayer(model, symbolMap, annotations) {
+  const out = [];
+
+  for (const f of model.flags) {
+    if (f.name === '0') {
+      out.push(`<path class="gnd" d="${GROUND_PATH}" fill="none" ` +
+        `transform="translate(${f.x} ${f.y})"/>`);
+    } else {
+      out.push(textEl(f.x, f.y - 8, 'Center', 2, [f.name], 'net'));
+    }
+  }
+
+  for (const inst of model.symbols) {
+    const def = getSymbol(symbolMap, inst.name);
+    if (!def) continue; // placeholders carry their own labels
+    out.push(renderInstanceText(inst, def));
+  }
+
+  if (annotations) {
+    for (const d of model.dataflags) {
+      if (!d.expr) continue; // most dataflags carry empty expressions
+      out.push(textEl(d.x + 8, d.y, 'Left', 2, [d.expr], 'dataflag'));
+    }
+    for (const t of model.texts) {
+      out.push(textEl(t.x, t.y, t.just, t.size, t.lines,
+        t.kind === 'directive' ? 'directive' : 'comment'));
+    }
+  }
+
+  return out.join('\n');
+}
+
+// ---- src/app.js ----
+// Filled in by Task 9.
+
+</script>
+</body>
+</html>
