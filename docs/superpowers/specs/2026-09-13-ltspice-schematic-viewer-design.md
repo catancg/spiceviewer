@@ -36,10 +36,23 @@ Findings from the two workspace files, verified by inspection.
 ### Encoding
 
 Plain 8-bit text, LF line endings, **cp1252** — not UTF-8. `100µ` is stored as
-byte `0xB5`; decoding as UTF-8 corrupts component values. Older LTspice writes
-UTF-16LE with a BOM, and roughly 2% of the installed symbol library is UTF-16.
-A BOM sniffer is therefore required: UTF-16LE/BE if a BOM is present, cp1252
-otherwise.
+byte `0xB5`; decoding as UTF-8 corrupts component values. Some LTspice files are
+UTF-16 instead.
+
+Decoding order:
+
+1. UTF-16LE/BE if a BOM is present.
+2. **UTF-16 with no BOM** — detected by a NUL in byte 0 or byte 1. Every `.asc`
+   and `.asy` begins with the ASCII word `Version`, so cp1252 text never looks
+   like this. (Discovered during implementation: `fraprobe.asy` in the stock
+   library is BOM-less UTF-16LE. Without this branch it decoded to NUL-riddled
+   text, parsed to zero geometry, and would have *resolved* — rendering as a
+   blank component with no placeholder warning.)
+3. cp1252 otherwise.
+
+`tools/gen-symbols.mjs` exits non-zero if any symbol parses with unrecognised
+lines, so a decoding regression fails the build instead of silently emitting
+empty artwork.
 
 ### Grammar
 
