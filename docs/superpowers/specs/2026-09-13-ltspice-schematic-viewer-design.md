@@ -101,8 +101,8 @@ with no wire, and the remaining two (`Q1` base and `R18`) both resolve to
 
 | File | Version | Sheet | Symbols | Notes |
 |---|---|---|---|---|
-| `TPLAB v4.2.asc` | 4 | 3652x1136 | 40 | `.step param POT`, `{R1}` parameters |
-| `v6_8_4ohm.asc` | 4.1 | 2144x1212 | 26 | needs custom `TIP121`/`TIP127` |
+| `TPLAB v4.2.asc` | 4 | 3652x1136 | 45 | `.step param POT`, `{R1}` parameters |
+| `v6_8_4ohm.asc` | 4.1 | 2144x1212 | 25 | needs custom `TIP121`/`TIP127` |
 
 Stock symbols required: `npn`, `pnp`, `res`, `cap`, `voltage` — all present in
 the local LTspice library at `~/AppData/Local/LTspice/lib/sym`.

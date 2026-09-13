@@ -515,8 +515,8 @@ test('parses both real workspace files without unknown lines', () => {
 test('symbol counts match the spec survey', () => {
   const tplab = parseAsc(decode(readFileSync('TPLAB v4.2.asc')));
   const v6 = parseAsc(decode(readFileSync('v6_8_4ohm.asc')));
-  assert.equal(tplab.symbols.length, 40);
-  assert.equal(v6.symbols.length, 26);
+  assert.equal(tplab.symbols.length, 45);
+  assert.equal(v6.symbols.length, 25);
 });
 ```
 
@@ -619,7 +619,7 @@ function tail(raw, i) {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/parse-asc.test.js`
-Expected: PASS, 11 tests. In particular the last two must confirm 40 and 26 symbols and zero unrecognised lines across both real files.
+Expected: PASS, 11 tests. In particular the last two must confirm 45 and 25 symbols and zero unrecognised lines across both real files.
 
 - [ ] **Step 5: Commit**
 
@@ -729,7 +729,7 @@ function checkPins(file) {
   const pinPoints = [];
   const unresolved = new Set();
   for (const inst of model.symbols) {
-    const def = symbols[inst.name];
+    const def = symbols[inst.name.toLowerCase()];
     if (!def) { unresolved.add(inst.name); continue; }
     for (const p of def.pins) pinPoints.push(place(inst, p.x, p.y));
   }
@@ -1320,9 +1320,33 @@ test('preserves the cp1252 micro sign end to end', () => {
 });
 
 test('hides attributes whose WINDOW size is zero', () => {
-  // Vcc has: WINDOW 123 0 0 Left 0 and SYMATTR Value2 AC 1 0
+  // Neither fixture exercises this rule: v6's size-0 WINDOW 123 entries belong
+  // to Vcc/Vee, which carry no Value2 at all, while Vs (which does) has
+  // WINDOW 123 size 2 and legitimately renders. So assert the rule directly.
+  const base = {
+    sheet: { n: 1, w: 100, h: 100 },
+    wires: [{ x1: 0, y1: 0, x2: 10, y2: 0 }],
+    flags: [], dataflags: [], texts: [], shapes: [], unknown: 0,
+  };
+  const map = { probe: { type: 'CELL', lines: [], rects: [], circles: [],
+    arcs: [], texts: [], pins: [], attrs: {}, unknown: 0,
+    windows: { 123: { x: 0, y: 0, just: 'Left', size: 2 } } } };
+  const inst = (size) => ({
+    name: 'probe', x: 0, y: 0, rot: 'R0',
+    attrs: { Value2: 'AC 1 0' },
+    windows: { 123: { x: 8, y: 8, just: 'Left', size } },
+  });
+
+  const shown = renderSvg({ ...base, symbols: [inst(2)] }, map);
+  assert.ok(shown.includes('AC 1 0'), 'size 2 must render Value2');
+
+  const hidden = renderSvg({ ...base, symbols: [inst(0)] }, map);
+  assert.ok(!hidden.includes('AC 1 0'), 'size 0 must suppress Value2');
+});
+
+test('Vs Value2 renders in the real file (WINDOW 123 size is 2 there)', () => {
   const svg = renderSvg(load('v6_8_4ohm.asc'), symbols);
-  assert.ok(!svg.includes('>AC 1 0<'), 'size-0 WINDOW must suppress Value2');
+  assert.ok(svg.includes('AC 1 0'), 'Vs carries WINDOW 123 size 2, so it shows');
 });
 
 test('renders net labels and the ground glyph', () => {
@@ -1922,11 +1946,14 @@ function zoomAbout(cx, cy, factor) {
   applyView();
 }
 
+// zoomAbout works in stage-relative coordinates, so convert here rather than
+// hardcoding the top-bar height.
 function midpoint() {
   const pts = [...pointers.values()];
+  const r = $('stage').getBoundingClientRect();
   return {
-    x: (pts[0].x + pts[1].x) / 2,
-    y: (pts[0].y + pts[1].y) / 2,
+    x: (pts[0].x + pts[1].x) / 2 - r.left,
+    y: (pts[0].y + pts[1].y) / 2 - r.top,
     d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
   };
 }
@@ -1973,10 +2000,13 @@ function initGestures() {
   stage.addEventListener('pointerup', release);
   stage.addEventListener('pointercancel', release);
 
-  // Desktop convenience; harmless on touch devices.
+  // Desktop convenience; harmless on touch devices. The stage origin is read
+  // from layout rather than hardcoded, so the CSS bar height stays the single
+  // source of truth for it.
   stage.addEventListener('wheel', (e) => {
     e.preventDefault();
-    zoomAbout(e.clientX, e.clientY - 57, Math.exp(-e.deltaY * 0.002));
+    const r = stage.getBoundingClientRect();
+    zoomAbout(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.002));
   }, { passive: false });
 
   $('fit').addEventListener('click', resetView);
