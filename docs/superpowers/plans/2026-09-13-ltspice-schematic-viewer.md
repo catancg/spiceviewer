@@ -125,7 +125,7 @@ Create `package.json`:
   "type": "module",
   "description": "Mobile viewer for LTspice .asc schematics",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test",
     "build": "node tools/build.mjs",
     "gen-symbols": "node tools/gen-symbols.mjs"
   }
@@ -907,7 +907,7 @@ This is the checkpoint the whole parsing layer was built toward. If either test 
 
 - [ ] **Step 4: Run the whole suite**
 
-Run: `node --test test/`
+Run: `node --test`
 Expected: PASS, all tests across 5 files.
 
 - [ ] **Step 5: Commit**
@@ -1519,7 +1519,7 @@ Expected: PASS, 11 tests.
 
 - [ ] **Step 5: Run the full suite**
 
-Run: `node --test test/`
+Run: `node --test`
 Expected: PASS across all 7 test files.
 
 - [ ] **Step 6: Commit**
@@ -1878,7 +1878,7 @@ function resetView() { /* replaced in Task 10 */ }
 
 - [ ] **Step 2: Rebuild**
 
-Run: `node tools/build.mjs && node --test test/`
+Run: `node tools/build.mjs && node --test`
 Expected: build succeeds; all existing tests still PASS.
 
 - [ ] **Step 3: Verify by hand in a browser**
@@ -2026,7 +2026,7 @@ The SVG's `viewBox` already fits the content to the element box, and the element
 
 - [ ] **Step 2: Rebuild and run the suite**
 
-Run: `node tools/build.mjs && node --test test/`
+Run: `node tools/build.mjs && node --test`
 Expected: build succeeds; all tests PASS.
 
 - [ ] **Step 3: Verify gestures by hand**
@@ -2123,7 +2123,7 @@ unknown, so wires will not meet them correctly.
 ## Develop
 
 ```bash
-node --test test/          # run the test suite
+node --test          # run the test suite
 node tools/gen-symbols.mjs # regenerate symbols.json (needs LTspice installed)
 node tools/build.mjs       # rebuild spiceviewer.html
 ```
@@ -2144,7 +2144,7 @@ so **top-level identifiers must be unique across `src/*.js`**.
 Run each and record the real output:
 
 ```bash
-node --test test/
+node --test
 node tools/build.mjs
 ```
 
@@ -2152,8 +2152,8 @@ Expected: every test passes; the build reports a size.
 
 Then, in a 390 px viewport, confirm and record:
 
-1. `TPLAB v4.2.asc` renders with all 40 components, no placeholder boxes.
-2. `v6_8_4ohm.asc` renders with 24 components plus 2 dashed placeholders and the banner.
+1. `TPLAB v4.2.asc` renders with all 45 components, no placeholder boxes.
+2. `v6_8_4ohm.asc` renders with 23 resolved components plus 2 dashed placeholders and the banner.
 3. Component values read correctly at zoom, `100µ` included with its micro sign.
 4. Net labels `vcc`, `vee`, `Vo`, `Vin-` are visible and legible.
 5. Ground glyphs appear at every `FLAG … 0`.
@@ -2176,7 +2176,7 @@ At completion, all of the following must hold, each confirmed by actual output r
 
 | Check | Command / method |
 |---|---|
-| All tests pass | `node --test test/` |
+| All tests pass | `node --test` |
 | Both files parse with zero unknown lines | `test/parse-asc.test.js` |
 | Pin invariant holds (102/102 and all resolved v6 pins) | `test/invariant.test.js` |
 | Build is self-contained | `test/build.test.js` |
