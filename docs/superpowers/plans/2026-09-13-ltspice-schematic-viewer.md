@@ -598,7 +598,7 @@ export function parseAsc(text) {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/parse-asc.test.js`
-Expected: PASS, 11 tests. In particular the last two must confirm 45 and 25 symbols and zero unrecognised lines across both real files.
+Expected: PASS, 12 tests. In particular the last two must confirm 45 and 25 symbols and zero unrecognised lines across both real files.
 
 - [ ] **Step 5: Commit**
 
@@ -1524,12 +1524,12 @@ Extend the `<style>` block inside `renderSvg` with:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/render-text.test.js`
-Expected: PASS, 11 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 5: Run the full suite**
 
 Run: `node --test`
-Expected: PASS across all 7 test files.
+Expected: PASS across all 7 test files (63 tests).
 
 - [ ] **Step 6: Commit**
 
