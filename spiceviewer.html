@@ -546,9 +546,9 @@ function renderInstanceText(inst, def) {
     if (!win) continue;
     if (win.size === 0) continue; // size 0 means hidden
 
-    // WINDOW offsets are read as pre-transform symbol-local coordinates.
-    // Task 11 calibrates this against the rendered output.
-    const [x, y] = place(inst, win.x, win.y);
+    // WINDOW offsets are absolute offsets from the instance origin, applied
+    // without rotation (established empirically; see task-11-calibration-input.md).
+    const x = inst.x + win.x, y = inst.y + win.y;
     out.push(textEl(x, y, win.just, win.size, [value], 'lbl'));
   }
   return out.join('');
