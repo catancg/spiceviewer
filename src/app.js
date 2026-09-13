@@ -123,6 +123,104 @@ function wireUp() {
   });
 }
 
-if (typeof document !== 'undefined') wireUp();
+const view = { x: 0, y: 0, k: 1 };
+const pointers = new Map();
+let pinchStart = null;
+let lastTap = 0;
 
-function resetView() { /* replaced in Task 10 */ }
+function svgEl() {
+  return $('stage').querySelector('svg');
+}
+
+function applyView() {
+  const el = svgEl();
+  if (el) el.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+}
+
+function resetView() {
+  view.x = 0;
+  view.y = 0;
+  view.k = 1;
+  applyView();
+}
+
+// Zoom about a fixed screen point so content under the fingers stays put.
+function zoomAbout(cx, cy, factor) {
+  const next = Math.min(40, Math.max(0.2, view.k * factor));
+  const ratio = next / view.k;
+  view.x = cx - (cx - view.x) * ratio;
+  view.y = cy - (cy - view.y) * ratio;
+  view.k = next;
+  applyView();
+}
+
+// zoomAbout works in stage-relative coordinates, so convert here rather than
+// hardcoding the top-bar height.
+function midpoint() {
+  const pts = [...pointers.values()];
+  const r = $('stage').getBoundingClientRect();
+  return {
+    x: (pts[0].x + pts[1].x) / 2 - r.left,
+    y: (pts[0].y + pts[1].y) / 2 - r.top,
+    d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+  };
+}
+
+function initGestures() {
+  const stage = $('stage');
+
+  stage.addEventListener('pointerdown', (e) => {
+    stage.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) pinchStart = midpoint();
+
+    const now = Date.now();
+    if (pointers.size === 1 && now - lastTap < 300) resetView();
+    lastTap = now;
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    const prev = pointers.get(e.pointerId);
+    if (!prev) return;
+    const next = { x: e.clientX, y: e.clientY };
+    pointers.set(e.pointerId, next);
+
+    if (pointers.size === 1) {
+      view.x += next.x - prev.x;
+      view.y += next.y - prev.y;
+      applyView();
+    } else if (pointers.size === 2 && pinchStart) {
+      const m = midpoint();
+      if (pinchStart.d > 0) {
+        zoomAbout(m.x, m.y, m.d / pinchStart.d);
+        view.x += m.x - pinchStart.x;
+        view.y += m.y - pinchStart.y;
+        applyView();
+      }
+      pinchStart = m;
+    }
+  });
+
+  const release = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchStart = null;
+  };
+  stage.addEventListener('pointerup', release);
+  stage.addEventListener('pointercancel', release);
+
+  // Desktop convenience; harmless on touch devices. The stage origin is read
+  // from layout rather than hardcoded, so the CSS bar height stays the single
+  // source of truth for it.
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    zoomAbout(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.002));
+  }, { passive: false });
+
+  $('fit').addEventListener('click', resetView);
+}
+
+if (typeof document !== 'undefined') {
+  wireUp();
+  initGestures();
+}
