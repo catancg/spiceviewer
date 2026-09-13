@@ -691,14 +691,16 @@ import { place } from '../src/transform.js';
 
 const symbols = JSON.parse(readFileSync('symbols.json', 'utf8'));
 
-// Structural invariant: every transformed symbol pin must coincide with a wire
-// endpoint, a flag, or another symbol's pin. This single assertion covers the
-// transform table, both parsers, and the generated symbol geometry at once.
-function checkPins(file) {
+// Structural invariant: a transformed symbol pin must land on a wire endpoint
+// or a flag. Anchors deliberately EXCLUDE other pins — letting a pin be
+// satisfied by another pin makes the assertion tautological (every pin sits on
+// itself) and also lets a transform that collapses all pins onto one point pass.
+// The few genuine direct pin-to-pin connections are asserted explicitly instead.
+function checkPins(file, placeFn = place) {
   const model = parseAsc(decode(readFileSync(file)));
-  const anchors = new Set();
   const key = (x, y) => `${x},${y}`;
 
+  const anchors = new Set();
   for (const w of model.wires) {
     anchors.add(key(w.x1, w.y1));
     anchors.add(key(w.x2, w.y2));
@@ -710,32 +712,51 @@ function checkPins(file) {
   for (const inst of model.symbols) {
     const def = symbols[inst.name.toLowerCase()];
     if (!def) { unresolved.add(inst.name); continue; }
-    for (const p of def.pins) pinPoints.push(place(inst, p.x, p.y));
+    for (const p of def.pins) pinPoints.push(placeFn(inst, p.x, p.y));
   }
-  for (const [x, y] of pinPoints) anchors.add(key(x, y));
 
-  let hit = 0;
-  const misses = [];
-  for (const [x, y] of pinPoints) {
-    if (anchors.has(key(x, y))) hit += 1;
-    else misses.push(`${x},${y}`);
-  }
-  return { total: pinPoints.length, hit, misses, unresolved: [...unresolved] };
+  const offAnchor = pinPoints
+    .map(([x, y]) => key(x, y))
+    .filter((k) => !anchors.has(k));
+
+  return {
+    total: pinPoints.length,
+    onAnchor: pinPoints.length - offAnchor.length,
+    offAnchor,
+    unresolved: [...unresolved],
+  };
 }
 
-test('TPLAB v4.2.asc: every resolved pin lands on an anchor', () => {
+test('TPLAB v4.2.asc: pins land on wires or flags', () => {
   const r = checkPins('TPLAB v4.2.asc');
   assert.deepEqual(r.unresolved, [], 'all TPLAB symbols must resolve from stock');
   assert.equal(r.total, 102);
-  assert.equal(r.hit, r.total, `unmatched pins: ${r.misses.join(' ')}`);
+  assert.equal(r.onAnchor, 100, `off-anchor pins: ${r.offAnchor.join(' ')}`);
 });
 
-test('v6_8_4ohm.asc: every resolved pin lands on an anchor', () => {
+test('TPLAB: the only off-anchor pins are the documented pin-to-pin pair', () => {
+  // Q1's base and R18 connect directly to each other at (16,176) with no wire
+  // between them, which LTspice permits.
+  const r = checkPins('TPLAB v4.2.asc');
+  assert.deepEqual(r.offAnchor, ['16,176', '16,176']);
+});
+
+test('v6_8_4ohm.asc: every resolved pin lands on a wire or flag', () => {
   const r = checkPins('v6_8_4ohm.asc');
-  // TIP121/TIP127 are user-supplied and absent from the stock library.
   assert.deepEqual(r.unresolved.sort(), ['TIP121', 'TIP127']);
-  assert.equal(r.hit, r.total, `unmatched pins: ${r.misses.join(' ')}`);
-  assert.ok(r.total >= 48);
+  assert.equal(r.total, 50);
+  assert.equal(r.onAnchor, 50, `off-anchor pins: ${r.offAnchor.join(' ')}`);
+  assert.deepEqual(r.offAnchor, []);
+});
+
+test('the invariant is not tautological: a wrong transform must fail it', () => {
+  // Ignore rotation entirely. If the assertion had any self-referential
+  // anchoring left, this would still score perfectly.
+  const ignoreRotation = (inst, px, py) => [inst.x + px, inst.y + py];
+  const r = checkPins('TPLAB v4.2.asc', ignoreRotation);
+  assert.equal(r.total, 102);
+  assert.equal(r.onAnchor, 73,
+    'ignoring rotation must drop TPLAB from 100 anchored pins to 73');
 });
 ```
 
@@ -880,7 +901,7 @@ If the symbol directory is not found, pass it explicitly. On this machine it is 
 - [ ] **Step 3: Run the invariant test, which now has its data**
 
 Run: `node --test test/invariant.test.js`
-Expected: PASS, 2 tests. TPLAB must report `102` total pins with `102` hits. v6 must report `TIP121`/`TIP127` as the only unresolved symbols and all resolved pins hitting anchors.
+Expected: PASS, 4 tests. TPLAB must report 102 total pins with 100 anchored (the 2 off-anchor pins are the documented (16,176) pair). v6 must report 50/50 anchored with `TIP121`/`TIP127` as the only unresolved symbols. The mutation test must confirm that ignoring rotation drops TPLAB to 73 anchored pins.
 
 This is the checkpoint the whole parsing layer was built toward. If either test fails, the failure message lists the exact unmatched coordinates — fix the parser or the transform, **do not relax the assertion**.
 
@@ -2157,7 +2178,7 @@ At completion, all of the following must hold, each confirmed by actual output r
 |---|---|
 | All tests pass | `node --test` |
 | Both files parse with zero unknown lines | `test/parse-asc.test.js` |
-| Pin invariant holds (102/102 and all resolved v6 pins) | `test/invariant.test.js` |
+| Pin invariant holds (TPLAB 100/102 anchored, v6 50/50) and is non-tautological | `test/invariant.test.js` |
 | Build is self-contained | `test/build.test.js` |
 | cp1252 `µ` survives end to end | `test/render-text.test.js` |
 | Renders correctly at phone width | Manual, Task 11 Step 4 |
