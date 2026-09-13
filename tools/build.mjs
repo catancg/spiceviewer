@@ -15,9 +15,12 @@ const ORDER = [
 
 function strip(src, path) {
   const out = src
-    .replace(/^\s*import\s[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gm, '')
+    .split('\n')
+    .filter((l) => !/^\s*import\s.*\bfrom\s+['"][^'"]+['"]\s*;?\s*(\/\/.*)?$/.test(l))
+    .join('\n')
     .replace(/^export\s+/gm, '');
-  if (/\bimport\s/.test(out)) {
+  // A multi-line import survives this and trips the guard below — loud, not silent.
+  if (/^\s*import\s/m.test(out)) {
     throw new Error(`${path}: an import statement survived stripping`);
   }
   return `// ---- ${path} ----\n${out.trim()}\n`;
