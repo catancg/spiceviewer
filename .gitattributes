@@ -1,0 +1,3 @@
+# LTspice files are cp1252 with LF endings; preserve bytes exactly (test fixtures)
+*.asc -text -diff
+*.asy -text -diff
