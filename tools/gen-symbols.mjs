@@ -48,3 +48,11 @@ if (missing.length) {
   process.exit(1);
 }
 console.log(`Required symbols present: ${required.join(', ')}`);
+
+const bad = Object.entries(out).filter(([, d]) => d.unknown > 0);
+if (bad.length) {
+  console.error(`FAIL: ${bad.length} symbol(s) had unrecognised lines: ` +
+    bad.map(([n, d]) => `${n}(${d.unknown})`).join(', '));
+  process.exit(1);
+}
+console.log('All symbols parsed with zero unrecognised lines.');

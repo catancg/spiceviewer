@@ -26,6 +26,16 @@ test('decodes UTF-16BE when a BOM is present', () => {
   assert.equal(decode(bytes), 'AB');
 });
 
+test('decodes BOM-less UTF-16LE (LTspice writes some .asy this way)', () => {
+  const bytes = new Uint8Array([0x56, 0x00, 0x65, 0x00, 0x72, 0x00]); // "Ver"
+  assert.equal(decode(bytes), 'Ver');
+});
+
+test('decodes BOM-less UTF-16BE', () => {
+  const bytes = new Uint8Array([0x00, 0x56, 0x00, 0x65, 0x00, 0x72]);
+  assert.equal(decode(bytes), 'Ver');
+});
+
 test('toLines strips CR from CRLF input', () => {
   assert.deepEqual(toLines('a\r\nb\nc'), ['a', 'b', 'c']);
 });

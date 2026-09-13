@@ -17,5 +17,19 @@ export function decode(buf) {
     }
     return new TextDecoder('utf-16le').decode(swapped);
   }
+  // LTspice also writes UTF-16LE with no BOM. Every .asc/.asy begins with the
+  // ASCII text "Version", so a NUL in the second byte (or the first) is a
+  // reliable signal — cp1252 text never starts that way.
+  if (b.length >= 2 && b[0] !== 0x00 && b[1] === 0x00) {
+    return new TextDecoder('utf-16le').decode(b);
+  }
+  if (b.length >= 2 && b[0] === 0x00 && b[1] !== 0x00) {
+    const swapped = new Uint8Array(b.length);
+    for (let i = 0; i + 1 < b.length; i += 2) {
+      swapped[i] = b[i + 1];
+      swapped[i + 1] = b[i];
+    }
+    return new TextDecoder('utf-16le').decode(swapped);
+  }
   return new TextDecoder('windows-1252').decode(b);
 }
