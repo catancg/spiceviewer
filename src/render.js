@@ -86,15 +86,14 @@ function renderSymbolBody(def, inst) {
   for (const l of def.lines) {
     const [x1, y1] = P(l.x1, l.y1);
     const [x2, y2] = P(l.x2, l.y2);
-    out.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ` +
-      `vector-effect="non-scaling-stroke"${dash(l.style)}/>`);
+    out.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${dash(l.style)}/>`);
   }
   for (const r of def.rects) {
     const [ax, ay] = P(r.x1, r.y1);
     const [bx, by] = P(r.x2, r.y2);
     out.push(`<rect x="${Math.min(ax, bx)}" y="${Math.min(ay, by)}" ` +
       `width="${Math.abs(bx - ax)}" height="${Math.abs(by - ay)}" ` +
-      `fill="none" vector-effect="non-scaling-stroke"${dash(r.style)}/>`);
+      `fill="none"${dash(r.style)}/>`);
   }
   for (const c of def.circles) {
     // CIRCLE gives a bounding box. Transform its centre; radii swap under the
@@ -103,7 +102,7 @@ function renderSymbolBody(def, inst) {
     const [tcx, tcy] = P(cx, cy);
     const [hx, hy] = ROT[inst.rot ?? 'R0'](Math.abs(c.x2 - c.x1) / 2, Math.abs(c.y2 - c.y1) / 2);
     out.push(`<ellipse cx="${tcx}" cy="${tcy}" rx="${Math.abs(hx)}" ry="${Math.abs(hy)}" ` +
-      `fill="none" vector-effect="non-scaling-stroke"${dash(c.style)}/>`);
+      `fill="none"${dash(c.style)}/>`);
   }
   for (const a of def.arcs) out.push(renderArc(a, inst));
   return out;
@@ -137,7 +136,7 @@ function renderArc(a, inst) {
   const sweep = mirrored ? 1 : 0;
 
   return `<path d="M ${tsx} ${tsy} A ${rx} ${ry} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
-    `fill="none" vector-effect="non-scaling-stroke"${dash(a.style)}/>`;
+    `fill="none"${dash(a.style)}/>`;
 }
 
 function renderPlaceholder(inst) {
@@ -163,12 +162,11 @@ export function renderSvg(model, symbolMap, opts = {}) {
   for (const s of model.shapes) {
     body.push(`<rect x="${Math.min(s.x1, s.x2)}" y="${Math.min(s.y1, s.y2)}" ` +
       `width="${Math.abs(s.x2 - s.x1)}" height="${Math.abs(s.y2 - s.y1)}" ` +
-      `fill="none" class="shape" vector-effect="non-scaling-stroke"${dash(s.style)}/>`);
+      `fill="none" class="shape"${dash(s.style)}/>`);
   }
 
   for (const wire of model.wires) {
-    body.push(`<line x1="${wire.x1}" y1="${wire.y1}" x2="${wire.x2}" y2="${wire.y2}" ` +
-      `vector-effect="non-scaling-stroke"/>`);
+    body.push(`<line x1="${wire.x1}" y1="${wire.y1}" x2="${wire.x2}" y2="${wire.y2}"/>`);
   }
 
   for (const inst of model.symbols) {

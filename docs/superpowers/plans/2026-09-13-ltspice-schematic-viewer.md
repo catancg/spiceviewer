@@ -999,7 +999,7 @@ test('renders a well-formed svg document for both real files', () => {
     assert.ok(svg.startsWith('<svg'), `${f}: must start with <svg`);
     assert.ok(svg.trimEnd().endsWith('</svg>'), `${f}: must end with </svg>`);
     assert.ok(svg.includes('viewBox='), `${f}: must set a viewBox`);
-    assert.ok(svg.includes('vector-effect="non-scaling-stroke"'),
+    assert.ok(/vector-effect:\s*non-scaling-stroke/.test(svg),
       `${f}: strokes must stay constant width at any zoom`);
   }
 });
