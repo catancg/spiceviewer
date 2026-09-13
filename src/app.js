@@ -61,12 +61,15 @@ function showBanner(model) {
   el.hidden = false;
 }
 
-export function showSchematic(model) {
+export function showSchematic(model, keepView = false) {
   currentModel = model;
   const stage = $('stage');
   stage.innerHTML = renderSvg(model, allSymbols(), { annotations });
   showBanner(model);
-  resetView();
+  // innerHTML replaced the <svg>, so the transform has to be re-applied to the
+  // new element rather than merely left alone.
+  if (keepView) applyView();
+  else resetView();
 }
 
 async function handleFiles(fileList) {
@@ -112,7 +115,7 @@ function wireUp() {
   $('ann').addEventListener('click', () => {
     annotations = !annotations;
     $('ann').setAttribute('aria-pressed', String(annotations));
-    if (currentModel) showSchematic(currentModel);
+    if (currentModel) showSchematic(currentModel, true);
   });
 
   const stage = $('stage');
