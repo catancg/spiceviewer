@@ -253,10 +253,19 @@ symbol-local space or are already-transformed offsets from the instance origin.
 For `R0` instances the two readings are identical, so the workspace files cannot
 distinguish them by inspection.
 
-**Resolution:** implement the local-space reading, render both files, and
-correct by eye. The wrong reading is immediately visible as labels sitting on
-top of components rather than beside them. This is a calibration step during
-implementation, not an open design question.
+**RESOLVED during implementation — offsets are absolute.** Both `.asy` defaults
+and `.asc` overrides are offsets from the instance origin in the placed frame,
+applied without rotation:
+
+```js
+const x = inst.x + win.x, y = inst.y + win.y;
+```
+
+Determined by rendering in a browser and then measuring label-vs-body overlap
+across every attribute in both fixtures: all-local scored 75 overlaps,
+all-absolute 38, a hybrid 48. R0 is identical under every hypothesis (it is the
+identity); every rotated orientation improves sharply under absolute, with R180,
+R270 and M0 reaching zero.
 
 ### Mobile specifics
 
@@ -346,6 +355,6 @@ Verification output is to be reported as actual results, not assurances.
 
 ## Open items carried into implementation
 
-1. Calibrate the `WINDOW` offset coordinate space (see above).
+1. ~~Calibrate the `WINDOW` offset coordinate space~~ — RESOLVED, see above.
 2. Source `TIP121.asy` / `TIP127.asy`, or accept placeholder rendering for
    `v6_8_4ohm.asc`.
