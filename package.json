@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Mobile viewer for LTspice .asc schematics",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test",
     "build": "node tools/build.mjs",
     "gen-symbols": "node tools/gen-symbols.mjs"
   }
