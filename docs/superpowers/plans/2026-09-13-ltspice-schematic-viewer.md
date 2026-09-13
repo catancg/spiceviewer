@@ -33,7 +33,7 @@
 | File | Responsibility |
 |---|---|
 | `package.json` | `"type": "module"`, test/build scripts. No dependencies. |
-| `src/tokenize.js` | Split text into lines (CRLF-safe) and lines into words. Shared by both parsers. |
+| `src/tokenize.js` | Line/word splitting (CRLF-safe), int parsing, and rest-of-line extraction that preserves inner spacing. Shared by both parsers. |
 | `src/decode.js` | `ArrayBuffer` to string. BOM sniffing, cp1252 fallback. |
 | `src/parse-asy.js` | `.asy` text to `SymbolDef`. |
 | `src/parse-asc.js` | `.asc` text to `SchematicModel`. |
@@ -65,6 +65,12 @@ Files that change together live together: both parsers sit beside the tokenizer 
   - `decode(buf: ArrayBuffer | Uint8Array) -> string`
   - `toLines(text: string) -> string[]` — splits on `\n`, strips a trailing `\r`
   - `toWords(line: string) -> string[]` — trims, splits on runs of whitespace
+  - `toInt(v: string) -> number` — `parseInt(v, 10)`
+  - `restFrom(raw: string, i: number) -> string` — everything from word index `i`
+    onward, preserving original inner spacing. Both parsers need this because
+    `TEXT` bodies and `SYMATTR` values contain spaces, and collapsing runs of
+    whitespace would corrupt them. (Added during execution: the plan originally
+    duplicated this body as `restAfter` in Task 2 and `tail` in Task 3.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -194,7 +200,7 @@ git commit -m "feat: add cp1252/UTF-16 decoder and line tokenizer"
 - Test: `test/parse-asy.test.js`
 
 **Interfaces:**
-- Consumes: `toLines`, `toWords` from `src/tokenize.js`.
+- Consumes: `toLines`, `toWords`, `toInt`, `restFrom` from `src/tokenize.js`.
 - Produces: `parseAsy(text: string) -> SymbolDef` where
 
 ```js
@@ -303,9 +309,7 @@ Expected: FAIL — `Cannot find module '../src/parse-asy.js'`
 Create `src/parse-asy.js`:
 
 ```js
-import { toLines, toWords } from './tokenize.js';
-
-const N = (v) => parseInt(v, 10);
+import { toLines, toWords, toInt, restFrom } from './tokenize.js';
 
 export function parseAsy(text) {
   const sym = {
@@ -325,40 +329,40 @@ export function parseAsy(text) {
         sym.type = w[1] ?? '';
         break;
       case 'LINE':
-        sym.lines.push({ style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]) });
+        sym.lines.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
         break;
       case 'RECTANGLE':
-        sym.rects.push({ style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]) });
+        sym.rects.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
         break;
       case 'CIRCLE':
-        sym.circles.push({ style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]) });
+        sym.circles.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
         break;
       case 'ARC':
         sym.arcs.push({
-          style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]),
-          xs: N(w[6]), ys: N(w[7]), xe: N(w[8]), ye: N(w[9]),
+          style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]),
+          xs: toInt(w[6]), ys: toInt(w[7]), xe: toInt(w[8]), ye: toInt(w[9]),
         });
         break;
       case 'TEXT':
         sym.texts.push({
-          x: N(w[1]), y: N(w[2]), just: w[3], size: N(w[4]),
-          text: restAfter(raw, 5),
+          x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]),
+          text: restFrom(raw, 5),
         });
         break;
       case 'WINDOW':
-        sym.windows[N(w[1])] = { x: N(w[2]), y: N(w[3]), just: w[4], size: N(w[5]) };
+        sym.windows[toInt(w[1])] = { x: toInt(w[2]), y: toInt(w[3]), just: w[4], size: toInt(w[5]) };
         break;
       case 'SYMATTR':
-        sym.attrs[w[1]] = restAfter(raw, 2);
+        sym.attrs[w[1]] = restFrom(raw, 2);
         break;
       case 'PIN':
-        sym.pins.push({ x: N(w[1]), y: N(w[2]), name: '', order: 0 });
+        sym.pins.push({ x: toInt(w[1]), y: toInt(w[2]), name: '', order: 0 });
         break;
       case 'PINATTR': {
         const pin = sym.pins[sym.pins.length - 1];
         if (!pin) { sym.unknown += 1; break; }
-        if (w[1] === 'PinName') pin.name = restAfter(raw, 2);
-        else if (w[1] === 'SpiceOrder') pin.order = N(w[2]);
+        if (w[1] === 'PinName') pin.name = restFrom(raw, 2);
+        else if (w[1] === 'SpiceOrder') pin.order = toInt(w[2]);
         break;
       }
       default:
@@ -366,18 +370,6 @@ export function parseAsy(text) {
     }
   }
   return sym;
-}
-
-// Returns everything from word index `i` onward, with original inner spacing.
-// Needed because TEXT bodies and SYMATTR values contain spaces.
-function restAfter(raw, i) {
-  const t = raw.trim();
-  let idx = 0;
-  for (let k = 0; k < i; k++) {
-    while (idx < t.length && !/\s/.test(t[idx])) idx++;
-    while (idx < t.length && /\s/.test(t[idx])) idx++;
-  }
-  return t.slice(idx);
 }
 ```
 
@@ -402,7 +394,7 @@ git commit -m "feat: add .asy symbol file parser"
 - Test: `test/parse-asc.test.js`
 
 **Interfaces:**
-- Consumes: `toLines`, `toWords` from `src/tokenize.js`.
+- Consumes: `toLines`, `toWords`, `toInt`, `restFrom` from `src/tokenize.js`.
 - Produces: `parseAsc(text: string) -> SchematicModel` where
 
 ```js
@@ -530,9 +522,7 @@ Expected: FAIL — `Cannot find module '../src/parse-asc.js'`
 Create `src/parse-asc.js`:
 
 ```js
-import { toLines, toWords } from './tokenize.js';
-
-const Z = (v) => parseInt(v, 10);
+import { toLines, toWords, toInt, restFrom } from './tokenize.js';
 
 export function parseAsc(text) {
   const model = {
@@ -550,42 +540,42 @@ export function parseAsc(text) {
       case 'Version':
         break;
       case 'SHEET':
-        model.sheet = { n: Z(w[1]), w: Z(w[2]), h: Z(w[3]) };
+        model.sheet = { n: toInt(w[1]), w: toInt(w[2]), h: toInt(w[3]) };
         break;
       case 'WIRE':
-        model.wires.push({ x1: Z(w[1]), y1: Z(w[2]), x2: Z(w[3]), y2: Z(w[4]) });
+        model.wires.push({ x1: toInt(w[1]), y1: toInt(w[2]), x2: toInt(w[3]), y2: toInt(w[4]) });
         break;
       case 'FLAG':
-        model.flags.push({ x: Z(w[1]), y: Z(w[2]), name: tail(raw, 3) });
+        model.flags.push({ x: toInt(w[1]), y: toInt(w[2]), name: restFrom(raw, 3) });
         break;
       case 'DATAFLAG':
         model.dataflags.push({
-          x: Z(w[1]), y: Z(w[2]), expr: tail(raw, 3).replace(/^"|"$/g, ''),
+          x: toInt(w[1]), y: toInt(w[2]), expr: restFrom(raw, 3).replace(/^"|"$/g, ''),
         });
         break;
       case 'SYMBOL':
         current = {
-          name: w[1], x: Z(w[2]), y: Z(w[3]), rot: w[4] ?? 'R0',
+          name: w[1], x: toInt(w[2]), y: toInt(w[3]), rot: w[4] ?? 'R0',
           attrs: {}, windows: {},
         };
         model.symbols.push(current);
         break;
       case 'WINDOW':
         if (current) {
-          current.windows[Z(w[1])] =
-            { x: Z(w[2]), y: Z(w[3]), just: w[4], size: Z(w[5]) };
+          current.windows[toInt(w[1])] =
+            { x: toInt(w[2]), y: toInt(w[3]), just: w[4], size: toInt(w[5]) };
         } else model.unknown += 1;
         break;
       case 'SYMATTR':
-        if (current) current.attrs[w[1]] = tail(raw, 2);
+        if (current) current.attrs[w[1]] = restFrom(raw, 2);
         else model.unknown += 1;
         break;
       case 'TEXT': {
-        const body = tail(raw, 4);
+        const body = restFrom(raw, 4);
         const kind = body.startsWith('!') ? 'directive'
                    : body.startsWith(';') ? 'comment' : 'comment';
         model.texts.push({
-          x: Z(w[1]), y: Z(w[2]), just: w[3], size: Z(w[4]), kind,
+          x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]), kind,
           // LTspice stores line breaks as the two characters \ and n.
           lines: body.replace(/^[!;]/, '').split('\\n'),
         });
@@ -594,7 +584,7 @@ export function parseAsc(text) {
       case 'RECTANGLE':
         model.shapes.push({
           type: 'rect', style: w[1],
-          x1: Z(w[2]), y1: Z(w[3]), x2: Z(w[4]), y2: Z(w[5]),
+          x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]),
         });
         break;
       default:
@@ -602,17 +592,6 @@ export function parseAsc(text) {
     }
   }
   return model;
-}
-
-// Everything from word index `i` onward, preserving inner spacing.
-function tail(raw, i) {
-  const t = raw.trim();
-  let idx = 0;
-  for (let k = 0; k < i; k++) {
-    while (idx < t.length && !/\s/.test(t[idx])) idx++;
-    while (idx < t.length && /\s/.test(t[idx])) idx++;
-  }
-  return t.slice(idx);
 }
 ```
 
