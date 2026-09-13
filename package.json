@@ -1,0 +1,12 @@
+{
+  "name": "spiceviewer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile viewer for LTspice .asc schematics",
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node tools/build.mjs",
+    "gen-symbols": "node tools/gen-symbols.mjs"
+  }
+}
