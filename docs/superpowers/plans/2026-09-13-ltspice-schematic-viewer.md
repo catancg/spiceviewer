@@ -571,7 +571,7 @@ export function parseAsc(text) {
         else model.unknown += 1;
         break;
       case 'TEXT': {
-        const body = restFrom(raw, 4);
+        const body = restFrom(raw, 5);
         const kind = body.startsWith('!') ? 'directive'
                    : body.startsWith(';') ? 'comment' : 'comment';
         model.texts.push({
