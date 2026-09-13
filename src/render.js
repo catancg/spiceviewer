@@ -200,12 +200,101 @@ export function renderSvg(model, symbolMap, opts = {}) {
     font-family: ui-monospace, Menlo, Consolas, monospace; }
   .placeholder rect { stroke: var(--warn, #b45309); }
   .placeholder text { fill: var(--warn, #b45309); }
+  .gnd { stroke: var(--ink, #111); }
+  .net { fill: var(--net, #1d4ed8); }
+  .directive { fill: var(--ink, #111); }
+  .comment { fill: var(--muted, #4b5563); }
+  .dataflag { fill: var(--probe, #047857); }
 </style>
 <g id="root">${body.join('\n')}</g>
 </svg>`;
 }
 
-// Replaced with the real implementation in Task 7.
-function renderTextLayer() {
-  return '';
+// LTspice text size codes 0-7, expressed in schematic units. These are an
+// initial calibration; Task 11 tunes them against the real files.
+export const SIZE = [10, 13, 16, 20, 26, 34, 48, 64];
+
+export function justAttrs(just = 'Left') {
+  const rotate = just.startsWith('V');
+  const base = rotate ? just.slice(1) : just;
+  const anchor =
+    base === 'Right' ? 'end' :
+    base === 'Center' ? 'middle' :
+    base === 'Top' || base === 'Bottom' ? 'middle' : 'start';
+  const baseline =
+    base === 'Top' ? 'hanging' :
+    base === 'Bottom' ? 'auto' : 'central';
+  return { anchor, baseline, rotate };
+}
+
+// The ground symbol has no .asy file, so it is drawn directly. A stub down
+// from the flag point into an open triangle, in LTspice's grid units.
+export const GROUND_PATH = 'M 0 0 L 0 12 M -16 12 L 16 12 L 0 28 Z';
+
+function textEl(x, y, just, sizeCode, lines, cls) {
+  const { anchor, baseline, rotate } = justAttrs(just);
+  const fs = SIZE[sizeCode] ?? SIZE[2];
+  // Text is never mirrored: only rotation is applied, never a negative scale.
+  const tf = rotate ? ` transform="rotate(-90 ${x} ${y})"` : '';
+  const body = lines.length === 1
+    ? esc(lines[0])
+    : lines.map((l, i) =>
+        `<tspan x="${x}" dy="${i === 0 ? 0 : fs * 1.2}">${esc(l)}</tspan>`).join('');
+  return `<text x="${x}" y="${y}" font-size="${fs}" text-anchor="${anchor}" ` +
+    `dominant-baseline="${baseline}" class="${cls}"${tf}>${body}</text>`;
+}
+
+// WINDOW id -> the SYMATTR key it positions.
+const WINDOW_ATTR = { 0: 'InstName', 3: 'Value', 123: 'Value2', 39: 'SpiceLine' };
+
+function renderInstanceText(inst, def) {
+  const out = [];
+  for (const [idStr, key] of Object.entries(WINDOW_ATTR)) {
+    const id = Number(idStr);
+    const value = inst.attrs[key];
+    if (!value) continue;
+
+    // Instance WINDOW overrides the symbol's default WINDOW.
+    const win = inst.windows[id] ?? def.windows[id];
+    if (!win) continue;
+    if (win.size === 0) continue; // size 0 means hidden
+
+    // WINDOW offsets are read as pre-transform symbol-local coordinates.
+    // Task 11 calibrates this against the rendered output.
+    const [x, y] = place(inst, win.x, win.y);
+    out.push(textEl(x, y, win.just, win.size, [value], 'lbl'));
+  }
+  return out.join('');
+}
+
+export function renderTextLayer(model, symbolMap, annotations) {
+  const out = [];
+
+  for (const f of model.flags) {
+    if (f.name === '0') {
+      out.push(`<path class="gnd" d="${GROUND_PATH}" fill="none" ` +
+        `transform="translate(${f.x} ${f.y})"/>`);
+    } else {
+      out.push(textEl(f.x, f.y - 8, 'Center', 2, [f.name], 'net'));
+    }
+  }
+
+  for (const inst of model.symbols) {
+    const def = getSymbol(symbolMap, inst.name);
+    if (!def) continue; // placeholders carry their own labels
+    out.push(renderInstanceText(inst, def));
+  }
+
+  if (annotations) {
+    for (const d of model.dataflags) {
+      if (!d.expr) continue; // most dataflags carry empty expressions
+      out.push(textEl(d.x + 8, d.y, 'Left', 2, [d.expr], 'dataflag'));
+    }
+    for (const t of model.texts) {
+      out.push(textEl(t.x, t.y, t.just, t.size, t.lines,
+        t.kind === 'directive' ? 'directive' : 'comment'));
+    }
+  }
+
+  return out.join('\n');
 }
