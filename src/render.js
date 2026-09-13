@@ -124,18 +124,26 @@ function renderArc(a, inst) {
   const [sx, sy] = onEllipse(a0);
   const [ex, ey] = onEllipse(a1);
 
-  // LTspice draws arcs counter-clockwise from start to end in its own
-  // y-down space, which is sweep-flag 0 in SVG.
   let delta = a1 - a0;
   while (delta <= 0) delta += Math.PI * 2;
   const largeArc = delta > Math.PI ? 1 : 0;
 
   const [tsx, tsy] = place(inst, sx, sy);
   const [tex, tey] = place(inst, ex, ey);
+  // Increasing theta is clockwise in this y-down parametrisation, which is
+  // SVG sweep-flag 1; largeArc is computed against that same direction.
+  // A mirrored instance flips the handedness, so it takes the opposite flag.
   const mirrored = (inst.rot ?? 'R0').startsWith('M');
-  const sweep = mirrored ? 1 : 0;
+  const sweep = mirrored ? 0 : 1;
 
-  return `<path d="M ${tsx} ${tsy} A ${rx} ${ry} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
+  // Radii swap under 90-degree orientations, same treatment as the CIRCLE
+  // branch: run the untransformed half-extents through ROT and take abs.
+  // Only the emitted radii change; angle maths and endpoints stay on the
+  // untransformed ellipse.
+  const [hx, hy] = ROT[inst.rot ?? 'R0'](rx, ry);
+  const erx = Math.abs(hx), ery = Math.abs(hy);
+
+  return `<path d="M ${tsx} ${tsy} A ${erx} ${ery} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
     `fill="none"${dash(a.style)}/>`;
 }
 

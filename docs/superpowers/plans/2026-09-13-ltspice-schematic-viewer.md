@@ -1171,8 +1171,11 @@ function renderArc(a, inst) {
   const [sx, sy] = onEllipse(a0);
   const [ex, ey] = onEllipse(a1);
 
-  // LTspice draws arcs counter-clockwise from start to end in its own
-  // y-down space, which is sweep-flag 0 in SVG.
+  // delta is measured from a0 towards a1 by INCREASING theta. In this y-down
+  // parametrisation increasing theta is clockwise, which is SVG sweep-flag 1,
+  // so largeArc is only consistent with sweep = 1. Verified numerically against
+  // SVG's endpoint-to-centre conversion: sweep 0 resolves a different centre and
+  // draws a different curve, 8 units off on ferritebead's real arc.
   let delta = a1 - a0;
   while (delta <= 0) delta += Math.PI * 2;
   const largeArc = delta > Math.PI ? 1 : 0;
@@ -1180,9 +1183,15 @@ function renderArc(a, inst) {
   const [tsx, tsy] = place(inst, sx, sy);
   const [tex, tey] = place(inst, ex, ey);
   const mirrored = (inst.rot ?? 'R0').startsWith('M');
-  const sweep = mirrored ? 1 : 0;
+  const sweep = mirrored ? 0 : 1;
 
-  return `<path d="M ${tsx} ${tsy} A ${rx} ${ry} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
+  // A 90-degree rotation swaps the ellipse's axes, so the emitted radii swap
+  // too — the same ROT-then-abs treatment the CIRCLE branch uses. The angle
+  // maths above deliberately stays in the untransformed frame.
+  const [hx, hy] = ROT[inst.rot ?? 'R0'](rx, ry);
+  const erx = Math.abs(hx), ery = Math.abs(hy);
+
+  return `<path d="M ${tsx} ${tsy} A ${erx} ${ery} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
     `fill="none"${dash(a.style)}/>`;
 }
 
