@@ -51,13 +51,24 @@ function unresolvedNames(model) {
 function showBanner(model) {
   const missing = unresolvedNames(model);
   const el = $('banner');
-  if (missing.length === 0) {
+
+  const sentences = [];
+  if (missing.length > 0) {
+    sentences.push(
+      `${missing.length} symbol${missing.length > 1 ? 's' : ''} unresolved: ` +
+      `${missing.join(', ')} — tap to add .asy files`);
+  }
+  // Spec: "Parsers skip unrecognized keywords and count them, surfacing
+  // 'N unrecognized lines' as a note" — shown whether or not symbols are missing.
+  if (model.unknown > 0) {
+    sentences.push(`${model.unknown} unrecognized line${model.unknown > 1 ? 's' : ''}`);
+  }
+
+  if (sentences.length === 0) {
     el.hidden = true;
     return;
   }
-  el.textContent =
-    `${missing.length} symbol${missing.length > 1 ? 's' : ''} unresolved: ` +
-    `${missing.join(', ')} — tap to add .asy files`;
+  $('banner-msg').textContent = sentences.join('. ');
   el.hidden = false;
 }
 
@@ -107,8 +118,14 @@ async function handleFiles(fileList) {
 function wireUp() {
   $('open').addEventListener('click', () => $('file').click());
   $('banner').addEventListener('click', () => $('file').click());
+  $('banner-dismiss').addEventListener('click', (e) => {
+    // Stop the click from bubbling to the banner's own handler, which would
+    // reopen the file picker instead of just dismissing.
+    e.stopPropagation();
+    $('banner').hidden = true;
+  });
   $('file').addEventListener('change', (e) => {
-    handleFiles(e.target.files);
+    handleFiles(e.target.files).catch(() => { $('name').textContent = 'Could not read that file'; });
     e.target.value = ''; // allow re-picking the same file
   });
 
@@ -122,7 +139,7 @@ function wireUp() {
   stage.addEventListener('dragover', (e) => e.preventDefault());
   stage.addEventListener('drop', (e) => {
     e.preventDefault();
-    handleFiles(e.dataTransfer.files);
+    handleFiles(e.dataTransfer.files).catch(() => { $('name').textContent = 'Could not read that file'; });
   });
 }
 

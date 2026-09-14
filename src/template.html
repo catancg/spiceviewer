@@ -32,9 +32,14 @@
   #stage svg { position: absolute; top: 0; left: 0;
     width: 100%; height: 100%; transform-origin: 0 0; }
   #banner { position: absolute; left: 8px; right: 8px; bottom: 8px;
-    padding: 10px 12px; border-radius: 10px; background: var(--bar);
+    display: flex; align-items: center; gap: 4px;
+    padding: 10px 6px 10px 12px; border-radius: 10px; background: var(--bar);
     border: 1px solid var(--warn); color: var(--warn); }
   #banner[hidden] { display: none; }
+  #banner-msg { flex: 1; min-width: 0; }
+  #banner-dismiss { flex: none; min-width: 44px; min-height: 44px;
+    background: none; border: none; color: var(--warn); font: inherit;
+    font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
   #empty { position: absolute; inset: 0; display: grid; place-items: center;
     padding: 24px; text-align: center; color: var(--muted); }
   #file { display: none; }
@@ -51,7 +56,10 @@
   <div id="empty">Tap <b>Open</b> and choose an .asc file.<br>
     Select its .asy symbol files at the same time if it uses custom parts.</div>
 </div>
-<div id="banner" hidden></div>
+<div id="banner" hidden>
+  <span id="banner-msg"></span>
+  <button id="banner-dismiss" type="button" aria-label="Dismiss">&times;</button>
+</div>
 <input id="file" type="file" multiple>
 <script>
 const SYMBOLS = /*<!--INJECT:SYMBOLS-->*/{};

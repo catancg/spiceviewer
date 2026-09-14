@@ -104,6 +104,27 @@ test('empty dataflag expressions render nothing', () => {
   assert.ok(!svg.includes('class="dataflag"></text>'), 'no empty dataflag elements');
 });
 
+test('symbol TEXT primitives render into the SVG', () => {
+  // No bundled symbol uses TEXT, but vendor .asy files routinely carry a
+  // part-label TEXT primitive — it must not silently vanish.
+  const symbolMap = {
+    withtext: {
+      type: 'CELL', lines: [], rects: [], circles: [], arcs: [], pins: [],
+      attrs: {}, unknown: 0, windows: {},
+      texts: [{ x: 10, y: 10, just: 'Left', size: 2, text: 'PartLabel' }],
+    },
+  };
+  const m = {
+    sheet: { n: 1, w: 100, h: 100 },
+    wires: [{ x1: 0, y1: 0, x2: 10, y2: 0 }],
+    flags: [], dataflags: [], texts: [], shapes: [], unknown: 0,
+    symbols: [{ name: 'withtext', x: 0, y: 0, rot: 'R0', attrs: {}, windows: {} }],
+  };
+  const svg = renderSvg(m, symbolMap);
+  assert.ok(svg.includes('PartLabel'), 'symbol TEXT primitive must reach the SVG');
+  assert.ok(svg.includes('class="symtext"'), 'symbol TEXT gets its own class');
+});
+
 test('escapes XML special characters in rendered labels', () => {
   const m = {
     sheet: { n: 1, w: 100, h: 100 },

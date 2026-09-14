@@ -14,6 +14,14 @@ test('symbol lookup is case-insensitive', () => {
   assert.equal(getSymbol(symbols, 'nope_not_real'), undefined);
 });
 
+test('symbol names with a library subdirectory resolve via basename', () => {
+  // LTspice writes "SYMBOL Opamps\UniversalOpamp2 ..." for symbols outside the
+  // top level; a user-supplied .asy is stored under its basename only.
+  const map = { npn: symbols.npn };
+  assert.equal(getSymbol(map, 'Opamps\\npn'), map.npn);
+  assert.equal(getSymbol(map, 'Opamps/npn'), map.npn);
+});
+
 test('bounds come from geometry, not the SHEET declaration', () => {
   const m = load('TPLAB v4.2.asc');
   assert.deepEqual(m.sheet, { n: 1, w: 3652, h: 1136 });

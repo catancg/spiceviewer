@@ -5,7 +5,11 @@ const DASH = { Dot: '2,6', ShortDash: '8,6', Dash: '16,8', LongDash: '24,8' };
 
 export function getSymbol(map, name) {
   if (!name) return undefined;
-  return map[name] ?? map[name.toLowerCase()];
+  const lower = name.toLowerCase();
+  // LTspice writes subdirectory-qualified names like "Opamps\\UniversalOpamp2".
+  // A user-supplied .asy is stored under its basename, so try that too.
+  const base = lower.split(/[\\/]/).pop();
+  return map[name] ?? map[lower] ?? map[base];
 }
 
 export function esc(s) {
@@ -55,6 +59,7 @@ function allSymbolPoints(def) {
   for (const c of def.circles) pts.push([c.x1, c.y1], [c.x2, c.y2]);
   for (const a of def.arcs) pts.push([a.x1, a.y1], [a.x2, a.y2]);
   for (const p of def.pins) pts.push([p.x, p.y]);
+  for (const t of def.texts) pts.push([t.x, t.y]);
   return pts;
 }
 
@@ -105,6 +110,10 @@ function renderSymbolBody(def, inst) {
       `fill="none"${dash(c.style)}/>`);
   }
   for (const a of def.arcs) out.push(renderArc(a, inst));
+  for (const t of def.texts) {
+    const [tx, ty] = P(t.x, t.y);
+    out.push(textEl(tx, ty, t.just, t.size, [t.text], 'symtext'));
+  }
   return out;
 }
 
@@ -205,6 +214,7 @@ export function renderSvg(model, symbolMap, opts = {}) {
   .directive { fill: var(--ink, #111); }
   .comment { fill: var(--muted, #4b5563); }
   .dataflag { fill: var(--probe, #047857); }
+  .symtext { fill: var(--ink, #111); }
 </style>
 <g id="root">${body.join('\n')}</g>
 </svg>`;
