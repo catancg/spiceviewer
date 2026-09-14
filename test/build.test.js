@@ -1,9 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
+import { buildHtml } from '../tools/build.mjs';
 
 test('spiceviewer.html exists (run: node tools/build.mjs)', () => {
   assert.ok(existsSync('spiceviewer.html'), 'build output missing');
+});
+
+test('the committed spiceviewer.html is up to date with src/', () => {
+  assert.equal(readFileSync('spiceviewer.html', 'utf8'), buildHtml(),
+    'spiceviewer.html is stale — run: node tools/build.mjs');
 });
 
 test('build output is fully self-contained', () => {
@@ -61,4 +67,11 @@ test('every src module reached the built output', () => {
   for (const f of ['tokenize', 'decode', 'parse-asy', 'parse-asc', 'transform', 'render', 'app']) {
     assert.ok(html.includes(`// ---- src/${f}.js ----`), `src/${f}.js missing from build`);
   }
+});
+
+test('the SYMBOLS script parses', () => {
+  const html = readFileSync('spiceviewer.html', 'utf8');
+  const m = html.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(m, 'built file must contain the classic SYMBOLS script');
+  assert.doesNotThrow(() => new Function(m[1]));
 });

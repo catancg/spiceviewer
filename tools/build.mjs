@@ -1,7 +1,9 @@
 // Concatenates src/ modules and symbols.json into one self-contained HTML file.
 // Modules are inlined in dependency order into a single module scope, so
 // top-level identifiers must be unique across files.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 const ORDER = [
   'src/tokenize.js',
@@ -26,16 +28,32 @@ function strip(src, path) {
   return `// ---- ${path} ----\n${out.trim()}\n`;
 }
 
-const modules = ORDER.map((p) => strip(readFileSync(p, 'utf8'), p)).join('\n');
-const symbols = readFileSync('symbols.json', 'utf8').trim();
+export function buildHtml() {
+  // A future src/foo.js that nobody registers in ORDER must fail loudly here,
+  // rather than being silently dropped from the build (ReferenceError at runtime).
+  const onDisk = readdirSync('src').filter((f) => f.endsWith('.js')).sort();
+  const listed = ORDER.map((p) => p.replace(/^src\//, '')).sort();
+  if (onDisk.join() !== listed.join()) {
+    throw new Error(
+      `ORDER is out of sync with src/.\n  on disk: ${onDisk.join(', ')}\n  in ORDER: ${listed.join(', ')}`);
+  }
 
-const html = readFileSync('src/template.html', 'utf8')
-  .replace('/*<!--INJECT:SYMBOLS-->*/{}', symbols)
-  .replace('<!--INJECT:MODULES-->', modules);
+  const modules = ORDER.map((p) => strip(readFileSync(p, 'utf8'), p)).join('\n');
+  const symbols = readFileSync('symbols.json', 'utf8').trim();
 
-if (html.includes('<!--INJECT:')) {
-  throw new Error('unreplaced placeholder remains in template');
+  const html = readFileSync('src/template.html', 'utf8')
+    .replace('/*<!--INJECT:SYMBOLS-->*/{}', symbols)
+    .replace('<!--INJECT:MODULES-->', modules);
+
+  if (html.includes('<!--INJECT:')) {
+    throw new Error('unreplaced placeholder remains in template');
+  }
+  return html;
 }
 
-writeFileSync('spiceviewer.html', html);
-console.log(`Wrote spiceviewer.html: ${(html.length / 1024).toFixed(1)} KB`);
+// Only write when run directly, so tests can import buildHtml without side effects.
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  const html = buildHtml();
+  writeFileSync('spiceviewer.html', html);
+  console.log(`Wrote spiceviewer.html: ${(html.length / 1024).toFixed(1)} KB`);
+}
