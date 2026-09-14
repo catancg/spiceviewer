@@ -36,18 +36,12 @@ for (const f of files) {
   out[name] = parseAsy(decode(readFileSync(join(dir, f))));
 }
 
-writeFileSync('symbols.json', JSON.stringify(out) + '\n');
-
-const bytes = JSON.stringify(out).length;
-console.log(`Wrote symbols.json: ${files.length} symbols, ${(bytes / 1024).toFixed(1)} KB`);
-
 const required = ['npn', 'pnp', 'res', 'cap', 'voltage'];
 const missing = required.filter((r) => !out[r]);
 if (missing.length) {
   console.error(`FAIL: required symbols missing: ${missing.join(', ')}`);
   process.exit(1);
 }
-console.log(`Required symbols present: ${required.join(', ')}`);
 
 const bad = Object.entries(out).filter(([, d]) => d.unknown > 0);
 if (bad.length) {
@@ -55,4 +49,12 @@ if (bad.length) {
     bad.map(([n, d]) => `${n}(${d.unknown})`).join(', '));
   process.exit(1);
 }
+
+// Only written once both guards above pass, so a failing run never leaves
+// rejected data on disk for the next build to bake in.
+writeFileSync('symbols.json', JSON.stringify(out) + '\n');
+
+const bytes = JSON.stringify(out).length;
+console.log(`Wrote symbols.json: ${files.length} symbols, ${(bytes / 1024).toFixed(1)} KB`);
+console.log(`Required symbols present: ${required.join(', ')}`);
 console.log('All symbols parsed with zero unrecognised lines.');

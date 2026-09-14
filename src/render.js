@@ -2,6 +2,9 @@ import { place, ROT, emptyBox, unionBox } from './transform.js';
 
 const MARGIN = 48;
 const DASH = { Dot: '2,6', ShortDash: '8,6', Dash: '16,8', LongDash: '24,8' };
+// Placeholder box width/height for an unresolved symbol, in schematic units.
+// Shared by computeBounds and renderPlaceholder so the two stay in sync.
+const PLACEHOLDER = 96;
 
 export function getSymbol(map, name) {
   if (!name) return undefined;
@@ -40,7 +43,7 @@ export function computeBounds(model, symbolMap) {
     const def = getSymbol(symbolMap, inst.name);
     if (!def) {
       unionBox(b, inst.x - 32, inst.y - 32);
-      unionBox(b, inst.x + 64, inst.y + 64);
+      unionBox(b, inst.x + PLACEHOLDER - 32, inst.y + PLACEHOLDER - 32);
       continue;
     }
     for (const p of allSymbolPoints(def)) {
@@ -157,7 +160,7 @@ function renderArc(a, inst) {
 }
 
 function renderPlaceholder(inst) {
-  const w = 96, h = 96;
+  const w = PLACEHOLDER, h = PLACEHOLDER;
   const label = [inst.attrs.InstName, inst.name, inst.attrs.Value]
     .filter(Boolean).map(esc);
   const rows = label.map((t, i) =>
@@ -197,7 +200,6 @@ export function renderSvg(model, symbolMap, opts = {}) {
     body.push(`<circle cx="${jx}" cy="${jy}" r="4" class="junction"/>`);
   }
 
-  // TEXT LAYER INSERTED IN TASK 7
   body.push(renderTextLayer(model, symbolMap, annotations));
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}">
@@ -220,8 +222,8 @@ export function renderSvg(model, symbolMap, opts = {}) {
 </svg>`;
 }
 
-// LTspice text size codes 0-7, expressed in schematic units. These are an
-// initial calibration; Task 11 tunes them against the real files.
+// LTspice text size codes 0-7, expressed in schematic units. Calibrated
+// against the bundled real .asc fixtures.
 export const SIZE = [10, 13, 16, 20, 26, 34, 48, 64];
 
 export function justAttrs(just = 'Left') {
@@ -270,7 +272,8 @@ function renderInstanceText(inst, def) {
     if (win.size === 0) continue; // size 0 means hidden
 
     // WINDOW offsets are absolute offsets from the instance origin, applied
-    // without rotation (established empirically; see task-11-calibration-input.md).
+    // without rotation. See the spec's "Known unknown: WINDOW offset
+    // coordinate space — RESOLVED" section for how this was established.
     const x = inst.x + win.x, y = inst.y + win.y;
     out.push(textEl(x, y, win.just, win.size, [value], 'lbl'));
   }

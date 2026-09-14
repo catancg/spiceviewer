@@ -62,6 +62,10 @@
 </div>
 <input id="file" type="file" multiple>
 <script>
+// Deliberately a classic (non-module) script: its top-level `const` is visible
+// to the module script below through the global lexical environment. Wrapping
+// this in an IIFE would hide SYMBOLS from app.js with no build or test
+// failure — just a blank page.
 const SYMBOLS = /*<!--INJECT:SYMBOLS-->*/{};
 </script>
 <script type="module">

@@ -48,8 +48,7 @@ export function parseAsc(text) {
         break;
       case 'TEXT': {
         const body = restFrom(raw, 5);
-        const kind = body.startsWith('!') ? 'directive'
-                   : body.startsWith(';') ? 'comment' : 'comment';
+        const kind = body.startsWith('!') ? 'directive' : 'comment';
         model.texts.push({
           x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]), kind,
           // LTspice stores line breaks as the two characters \ and n.

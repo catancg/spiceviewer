@@ -21,6 +21,48 @@ test('justification maps to svg anchors', () => {
   assert.equal(justAttrs('Left').rotate, false);
 });
 
+// Both shipped fixtures use VTop and VBottom in real WINDOW lines, and Task
+// 11's browser check looked at RE1 (R180, plain Left) — so these anchors were
+// never actually pinned by a test before.
+test('V-prefixed justifications rotate and keep their base anchor/baseline', () => {
+  const vTop = justAttrs('VTop');
+  assert.equal(vTop.rotate, true);
+  assert.equal(vTop.anchor, 'middle');
+  assert.equal(vTop.baseline, 'hanging');
+
+  const vBottom = justAttrs('VBottom');
+  assert.equal(vBottom.rotate, true);
+  assert.equal(vBottom.anchor, 'middle');
+  assert.equal(vBottom.baseline, 'auto');
+
+  const vCenter = justAttrs('VCenter');
+  assert.equal(vCenter.rotate, true);
+  assert.equal(vCenter.anchor, 'middle');
+  assert.equal(vCenter.baseline, 'central');
+
+  const vRight = justAttrs('VRight');
+  assert.equal(vRight.rotate, true);
+  assert.equal(vRight.anchor, 'end');
+  assert.equal(vRight.baseline, 'central');
+});
+
+test('a VBottom window rotates its text -90 degrees in the rendered svg', () => {
+  const base = {
+    sheet: { n: 1, w: 100, h: 100 },
+    wires: [{ x1: 0, y1: 0, x2: 10, y2: 0 }],
+    flags: [], dataflags: [], texts: [], shapes: [], unknown: 0,
+  };
+  const map = { probe: { type: 'CELL', lines: [], rects: [], circles: [],
+    arcs: [], texts: [], pins: [], attrs: {}, unknown: 0, windows: {} } };
+  const inst = {
+    name: 'probe', x: 0, y: 0, rot: 'R0',
+    attrs: { InstName: 'U1' },
+    windows: { 0: { x: 8, y: 8, just: 'VBottom', size: 2 } },
+  };
+  const svg = renderSvg({ ...base, symbols: [inst] }, map);
+  assert.ok(/rotate\(-90 /.test(svg), 'VBottom justification must rotate the text -90deg');
+});
+
 test('renders instance names and values', () => {
   const svg = renderSvg(load('v6_8_4ohm.asc'), symbols);
   assert.ok(svg.includes('>Q1<'), 'transistor instance name');
