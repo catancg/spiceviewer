@@ -36,10 +36,23 @@ Findings from the two workspace files, verified by inspection.
 ### Encoding
 
 Plain 8-bit text, LF line endings, **cp1252** — not UTF-8. `100µ` is stored as
-byte `0xB5`; decoding as UTF-8 corrupts component values. Older LTspice writes
-UTF-16LE with a BOM, and roughly 2% of the installed symbol library is UTF-16.
-A BOM sniffer is therefore required: UTF-16LE/BE if a BOM is present, cp1252
-otherwise.
+byte `0xB5`; decoding as UTF-8 corrupts component values. Some LTspice files are
+UTF-16 instead.
+
+Decoding order:
+
+1. UTF-16LE/BE if a BOM is present.
+2. **UTF-16 with no BOM** — detected by a NUL in byte 0 or byte 1. Every `.asc`
+   and `.asy` begins with the ASCII word `Version`, so cp1252 text never looks
+   like this. (Discovered during implementation: `fraprobe.asy` in the stock
+   library is BOM-less UTF-16LE. Without this branch it decoded to NUL-riddled
+   text, parsed to zero geometry, and would have *resolved* — rendering as a
+   blank component with no placeholder warning.)
+3. cp1252 otherwise.
+
+`tools/gen-symbols.mjs` exits non-zero if any symbol parses with unrecognised
+lines, so a decoding regression fails the build instead of silently emitting
+empty artwork.
 
 ### Grammar
 
@@ -101,8 +114,8 @@ with no wire, and the remaining two (`Q1` base and `R18`) both resolve to
 
 | File | Version | Sheet | Symbols | Notes |
 |---|---|---|---|---|
-| `TPLAB v4.2.asc` | 4 | 3652x1136 | 40 | `.step param POT`, `{R1}` parameters |
-| `v6_8_4ohm.asc` | 4.1 | 2144x1212 | 26 | needs custom `TIP121`/`TIP127` |
+| `TPLAB v4.2.asc` | 4 | 3652x1136 | 45 | `.step param POT`, `{R1}` parameters |
+| `v6_8_4ohm.asc` | 4.1 | 2144x1212 | 25 | needs custom `TIP121`/`TIP127` |
 
 Stock symbols required: `npn`, `pnp`, `res`, `cap`, `voltage` — all present in
 the local LTspice library at `~/AppData/Local/LTspice/lib/sym`.
@@ -240,10 +253,19 @@ symbol-local space or are already-transformed offsets from the instance origin.
 For `R0` instances the two readings are identical, so the workspace files cannot
 distinguish them by inspection.
 
-**Resolution:** implement the local-space reading, render both files, and
-correct by eye. The wrong reading is immediately visible as labels sitting on
-top of components rather than beside them. This is a calibration step during
-implementation, not an open design question.
+**RESOLVED during implementation — offsets are absolute.** Both `.asy` defaults
+and `.asc` overrides are offsets from the instance origin in the placed frame,
+applied without rotation:
+
+```js
+const x = inst.x + win.x, y = inst.y + win.y;
+```
+
+Determined by rendering in a browser and then measuring label-vs-body overlap
+across every attribute in both fixtures: all-local scored 75 overlaps,
+all-absolute 38, a hybrid 48. R0 is identical under every hypothesis (it is the
+identity); every rotated orientation improves sharply under absolute, with R180,
+R270 and M0 reaching zero.
 
 ### Mobile specifics
 
@@ -333,6 +355,6 @@ Verification output is to be reported as actual results, not assurances.
 
 ## Open items carried into implementation
 
-1. Calibrate the `WINDOW` offset coordinate space (see above).
+1. ~~Calibrate the `WINDOW` offset coordinate space~~ — RESOLVED, see above.
 2. Source `TIP121.asy` / `TIP127.asy`, or accept placeholder rendering for
    `v6_8_4ohm.asc`.

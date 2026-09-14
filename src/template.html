@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LTspice Schematic Viewer</title>
+<style>
+  :root {
+    --bg: #fbfbf9; --ink: #111; --muted: #4b5563; --net: #1d4ed8;
+    --probe: #047857; --warn: #b45309; --bar: #ffffff; --line: #d4d4d8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14151a; --ink: #e8e8ea; --muted: #9ca3af; --net: #7dd3fc;
+      --probe: #6ee7b7; --warn: #fbbf24; --bar: #1c1d23; --line: #2e3038;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  #bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: var(--bar); border-bottom: 1px solid var(--line); }
+  #name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; color: var(--muted); }
+  button { min-height: 44px; min-width: 44px; padding: 0 12px;
+    background: none; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink); font: inherit; }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--bar); }
+  #stage { position: absolute; inset: 57px 0 0 0; overflow: hidden;
+    touch-action: none; }
+  #stage svg { position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; transform-origin: 0 0; }
+  #banner { position: absolute; left: 8px; right: 8px; bottom: 8px;
+    display: flex; align-items: center; gap: 4px;
+    padding: 10px 6px 10px 12px; border-radius: 10px; background: var(--bar);
+    border: 1px solid var(--warn); color: var(--warn); }
+  #banner[hidden] { display: none; }
+  #banner-msg { flex: 1; min-width: 0; }
+  #banner-dismiss { flex: none; min-width: 44px; min-height: 44px;
+    background: none; border: none; color: var(--warn); font: inherit;
+    font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+  #empty { position: absolute; inset: 0; display: grid; place-items: center;
+    padding: 24px; text-align: center; color: var(--muted); }
+  #file { display: none; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="open">Open</button>
+  <span id="name">No file</span>
+  <button id="ann" aria-pressed="true">Notes</button>
+  <button id="fit">Fit</button>
+</div>
+<div id="stage">
+  <div id="empty">Tap <b>Open</b> and choose an .asc file.<br>
+    Select its .asy symbol files at the same time if it uses custom parts.</div>
+</div>
+<div id="banner" hidden>
+  <span id="banner-msg"></span>
+  <button id="banner-dismiss" type="button" aria-label="Dismiss">&times;</button>
+</div>
+<input id="file" type="file" multiple>
+<script>
+// Deliberately a classic (non-module) script: its top-level `const` is visible
+// to the module script below through the global lexical environment. Wrapping
+// this in an IIFE would hide SYMBOLS from app.js with no build or test
+// failure — just a blank page.
+const SYMBOLS = /*<!--INJECT:SYMBOLS-->*/{};
+</script>
+<script type="module">
+<!--INJECT:MODULES-->
+</script>
+</body>
+</html>

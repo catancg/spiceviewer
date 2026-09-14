@@ -1,3 +1,8 @@
+# Keep text files LF in the working tree so the build is byte-reproducible across
+# platforms. test/build.test.js compares built output against the committed
+# spiceviewer.html, so a CRLF checkout would otherwise fail on a fresh clone.
+* text=auto eol=lf
+
 # LTspice files are cp1252 with LF endings; preserve bytes exactly (test fixtures)
 *.asc -text -diff
 *.asy -text -diff

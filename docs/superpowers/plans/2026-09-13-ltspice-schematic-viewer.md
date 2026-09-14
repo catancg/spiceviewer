@@ -33,7 +33,7 @@
 | File | Responsibility |
 |---|---|
 | `package.json` | `"type": "module"`, test/build scripts. No dependencies. |
-| `src/tokenize.js` | Split text into lines (CRLF-safe) and lines into words. Shared by both parsers. |
+| `src/tokenize.js` | Line/word splitting (CRLF-safe), int parsing, and rest-of-line extraction that preserves inner spacing. Shared by both parsers. |
 | `src/decode.js` | `ArrayBuffer` to string. BOM sniffing, cp1252 fallback. |
 | `src/parse-asy.js` | `.asy` text to `SymbolDef`. |
 | `src/parse-asc.js` | `.asc` text to `SchematicModel`. |
@@ -65,6 +65,12 @@ Files that change together live together: both parsers sit beside the tokenizer 
   - `decode(buf: ArrayBuffer | Uint8Array) -> string`
   - `toLines(text: string) -> string[]` — splits on `\n`, strips a trailing `\r`
   - `toWords(line: string) -> string[]` — trims, splits on runs of whitespace
+  - `toInt(v: string) -> number` — `parseInt(v, 10)`
+  - `restFrom(raw: string, i: number) -> string` — everything from word index `i`
+    onward, preserving original inner spacing. Both parsers need this because
+    `TEXT` bodies and `SYMATTR` values contain spaces, and collapsing runs of
+    whitespace would corrupt them. (Added during execution: the plan originally
+    duplicated this body as `restAfter` in Task 2 and `tail` in Task 3.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -125,7 +131,7 @@ Create `package.json`:
   "type": "module",
   "description": "Mobile viewer for LTspice .asc schematics",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test",
     "build": "node tools/build.mjs",
     "gen-symbols": "node tools/gen-symbols.mjs"
   }
@@ -194,7 +200,7 @@ git commit -m "feat: add cp1252/UTF-16 decoder and line tokenizer"
 - Test: `test/parse-asy.test.js`
 
 **Interfaces:**
-- Consumes: `toLines`, `toWords` from `src/tokenize.js`.
+- Consumes: `toLines`, `toWords`, `toInt`, `restFrom` from `src/tokenize.js`.
 - Produces: `parseAsy(text: string) -> SymbolDef` where
 
 ```js
@@ -303,9 +309,7 @@ Expected: FAIL — `Cannot find module '../src/parse-asy.js'`
 Create `src/parse-asy.js`:
 
 ```js
-import { toLines, toWords } from './tokenize.js';
-
-const N = (v) => parseInt(v, 10);
+import { toLines, toWords, toInt, restFrom } from './tokenize.js';
 
 export function parseAsy(text) {
   const sym = {
@@ -325,40 +329,40 @@ export function parseAsy(text) {
         sym.type = w[1] ?? '';
         break;
       case 'LINE':
-        sym.lines.push({ style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]) });
+        sym.lines.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
         break;
       case 'RECTANGLE':
-        sym.rects.push({ style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]) });
+        sym.rects.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
         break;
       case 'CIRCLE':
-        sym.circles.push({ style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]) });
+        sym.circles.push({ style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]) });
         break;
       case 'ARC':
         sym.arcs.push({
-          style: w[1], x1: N(w[2]), y1: N(w[3]), x2: N(w[4]), y2: N(w[5]),
-          xs: N(w[6]), ys: N(w[7]), xe: N(w[8]), ye: N(w[9]),
+          style: w[1], x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]),
+          xs: toInt(w[6]), ys: toInt(w[7]), xe: toInt(w[8]), ye: toInt(w[9]),
         });
         break;
       case 'TEXT':
         sym.texts.push({
-          x: N(w[1]), y: N(w[2]), just: w[3], size: N(w[4]),
-          text: restAfter(raw, 5),
+          x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]),
+          text: restFrom(raw, 5),
         });
         break;
       case 'WINDOW':
-        sym.windows[N(w[1])] = { x: N(w[2]), y: N(w[3]), just: w[4], size: N(w[5]) };
+        sym.windows[toInt(w[1])] = { x: toInt(w[2]), y: toInt(w[3]), just: w[4], size: toInt(w[5]) };
         break;
       case 'SYMATTR':
-        sym.attrs[w[1]] = restAfter(raw, 2);
+        sym.attrs[w[1]] = restFrom(raw, 2);
         break;
       case 'PIN':
-        sym.pins.push({ x: N(w[1]), y: N(w[2]), name: '', order: 0 });
+        sym.pins.push({ x: toInt(w[1]), y: toInt(w[2]), name: '', order: 0 });
         break;
       case 'PINATTR': {
         const pin = sym.pins[sym.pins.length - 1];
         if (!pin) { sym.unknown += 1; break; }
-        if (w[1] === 'PinName') pin.name = restAfter(raw, 2);
-        else if (w[1] === 'SpiceOrder') pin.order = N(w[2]);
+        if (w[1] === 'PinName') pin.name = restFrom(raw, 2);
+        else if (w[1] === 'SpiceOrder') pin.order = toInt(w[2]);
         break;
       }
       default:
@@ -366,18 +370,6 @@ export function parseAsy(text) {
     }
   }
   return sym;
-}
-
-// Returns everything from word index `i` onward, with original inner spacing.
-// Needed because TEXT bodies and SYMATTR values contain spaces.
-function restAfter(raw, i) {
-  const t = raw.trim();
-  let idx = 0;
-  for (let k = 0; k < i; k++) {
-    while (idx < t.length && !/\s/.test(t[idx])) idx++;
-    while (idx < t.length && /\s/.test(t[idx])) idx++;
-  }
-  return t.slice(idx);
 }
 ```
 
@@ -402,7 +394,7 @@ git commit -m "feat: add .asy symbol file parser"
 - Test: `test/parse-asc.test.js`
 
 **Interfaces:**
-- Consumes: `toLines`, `toWords` from `src/tokenize.js`.
+- Consumes: `toLines`, `toWords`, `toInt`, `restFrom` from `src/tokenize.js`.
 - Produces: `parseAsc(text: string) -> SchematicModel` where
 
 ```js
@@ -515,8 +507,8 @@ test('parses both real workspace files without unknown lines', () => {
 test('symbol counts match the spec survey', () => {
   const tplab = parseAsc(decode(readFileSync('TPLAB v4.2.asc')));
   const v6 = parseAsc(decode(readFileSync('v6_8_4ohm.asc')));
-  assert.equal(tplab.symbols.length, 40);
-  assert.equal(v6.symbols.length, 26);
+  assert.equal(tplab.symbols.length, 45);
+  assert.equal(v6.symbols.length, 25);
 });
 ```
 
@@ -530,9 +522,7 @@ Expected: FAIL — `Cannot find module '../src/parse-asc.js'`
 Create `src/parse-asc.js`:
 
 ```js
-import { toLines, toWords } from './tokenize.js';
-
-const Z = (v) => parseInt(v, 10);
+import { toLines, toWords, toInt, restFrom } from './tokenize.js';
 
 export function parseAsc(text) {
   const model = {
@@ -550,42 +540,42 @@ export function parseAsc(text) {
       case 'Version':
         break;
       case 'SHEET':
-        model.sheet = { n: Z(w[1]), w: Z(w[2]), h: Z(w[3]) };
+        model.sheet = { n: toInt(w[1]), w: toInt(w[2]), h: toInt(w[3]) };
         break;
       case 'WIRE':
-        model.wires.push({ x1: Z(w[1]), y1: Z(w[2]), x2: Z(w[3]), y2: Z(w[4]) });
+        model.wires.push({ x1: toInt(w[1]), y1: toInt(w[2]), x2: toInt(w[3]), y2: toInt(w[4]) });
         break;
       case 'FLAG':
-        model.flags.push({ x: Z(w[1]), y: Z(w[2]), name: tail(raw, 3) });
+        model.flags.push({ x: toInt(w[1]), y: toInt(w[2]), name: restFrom(raw, 3) });
         break;
       case 'DATAFLAG':
         model.dataflags.push({
-          x: Z(w[1]), y: Z(w[2]), expr: tail(raw, 3).replace(/^"|"$/g, ''),
+          x: toInt(w[1]), y: toInt(w[2]), expr: restFrom(raw, 3).replace(/^"|"$/g, ''),
         });
         break;
       case 'SYMBOL':
         current = {
-          name: w[1], x: Z(w[2]), y: Z(w[3]), rot: w[4] ?? 'R0',
+          name: w[1], x: toInt(w[2]), y: toInt(w[3]), rot: w[4] ?? 'R0',
           attrs: {}, windows: {},
         };
         model.symbols.push(current);
         break;
       case 'WINDOW':
         if (current) {
-          current.windows[Z(w[1])] =
-            { x: Z(w[2]), y: Z(w[3]), just: w[4], size: Z(w[5]) };
+          current.windows[toInt(w[1])] =
+            { x: toInt(w[2]), y: toInt(w[3]), just: w[4], size: toInt(w[5]) };
         } else model.unknown += 1;
         break;
       case 'SYMATTR':
-        if (current) current.attrs[w[1]] = tail(raw, 2);
+        if (current) current.attrs[w[1]] = restFrom(raw, 2);
         else model.unknown += 1;
         break;
       case 'TEXT': {
-        const body = tail(raw, 4);
+        const body = restFrom(raw, 5);
         const kind = body.startsWith('!') ? 'directive'
                    : body.startsWith(';') ? 'comment' : 'comment';
         model.texts.push({
-          x: Z(w[1]), y: Z(w[2]), just: w[3], size: Z(w[4]), kind,
+          x: toInt(w[1]), y: toInt(w[2]), just: w[3], size: toInt(w[4]), kind,
           // LTspice stores line breaks as the two characters \ and n.
           lines: body.replace(/^[!;]/, '').split('\\n'),
         });
@@ -594,7 +584,7 @@ export function parseAsc(text) {
       case 'RECTANGLE':
         model.shapes.push({
           type: 'rect', style: w[1],
-          x1: Z(w[2]), y1: Z(w[3]), x2: Z(w[4]), y2: Z(w[5]),
+          x1: toInt(w[2]), y1: toInt(w[3]), x2: toInt(w[4]), y2: toInt(w[5]),
         });
         break;
       default:
@@ -603,23 +593,12 @@ export function parseAsc(text) {
   }
   return model;
 }
-
-// Everything from word index `i` onward, preserving inner spacing.
-function tail(raw, i) {
-  const t = raw.trim();
-  let idx = 0;
-  for (let k = 0; k < i; k++) {
-    while (idx < t.length && !/\s/.test(t[idx])) idx++;
-    while (idx < t.length && /\s/.test(t[idx])) idx++;
-  }
-  return t.slice(idx);
-}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/parse-asc.test.js`
-Expected: PASS, 11 tests. In particular the last two must confirm 40 and 26 symbols and zero unrecognised lines across both real files.
+Expected: PASS, 12 tests. In particular the last two must confirm 45 and 25 symbols and zero unrecognised lines across both real files.
 
 - [ ] **Step 5: Commit**
 
@@ -712,14 +691,16 @@ import { place } from '../src/transform.js';
 
 const symbols = JSON.parse(readFileSync('symbols.json', 'utf8'));
 
-// Structural invariant: every transformed symbol pin must coincide with a wire
-// endpoint, a flag, or another symbol's pin. This single assertion covers the
-// transform table, both parsers, and the generated symbol geometry at once.
-function checkPins(file) {
+// Structural invariant: a transformed symbol pin must land on a wire endpoint
+// or a flag. Anchors deliberately EXCLUDE other pins — letting a pin be
+// satisfied by another pin makes the assertion tautological (every pin sits on
+// itself) and also lets a transform that collapses all pins onto one point pass.
+// The few genuine direct pin-to-pin connections are asserted explicitly instead.
+function checkPins(file, placeFn = place) {
   const model = parseAsc(decode(readFileSync(file)));
-  const anchors = new Set();
   const key = (x, y) => `${x},${y}`;
 
+  const anchors = new Set();
   for (const w of model.wires) {
     anchors.add(key(w.x1, w.y1));
     anchors.add(key(w.x2, w.y2));
@@ -729,34 +710,53 @@ function checkPins(file) {
   const pinPoints = [];
   const unresolved = new Set();
   for (const inst of model.symbols) {
-    const def = symbols[inst.name];
+    const def = symbols[inst.name.toLowerCase()];
     if (!def) { unresolved.add(inst.name); continue; }
-    for (const p of def.pins) pinPoints.push(place(inst, p.x, p.y));
+    for (const p of def.pins) pinPoints.push(placeFn(inst, p.x, p.y));
   }
-  for (const [x, y] of pinPoints) anchors.add(key(x, y));
 
-  let hit = 0;
-  const misses = [];
-  for (const [x, y] of pinPoints) {
-    if (anchors.has(key(x, y))) hit += 1;
-    else misses.push(`${x},${y}`);
-  }
-  return { total: pinPoints.length, hit, misses, unresolved: [...unresolved] };
+  const offAnchor = pinPoints
+    .map(([x, y]) => key(x, y))
+    .filter((k) => !anchors.has(k));
+
+  return {
+    total: pinPoints.length,
+    onAnchor: pinPoints.length - offAnchor.length,
+    offAnchor,
+    unresolved: [...unresolved],
+  };
 }
 
-test('TPLAB v4.2.asc: every resolved pin lands on an anchor', () => {
+test('TPLAB v4.2.asc: pins land on wires or flags', () => {
   const r = checkPins('TPLAB v4.2.asc');
   assert.deepEqual(r.unresolved, [], 'all TPLAB symbols must resolve from stock');
   assert.equal(r.total, 102);
-  assert.equal(r.hit, r.total, `unmatched pins: ${r.misses.join(' ')}`);
+  assert.equal(r.onAnchor, 100, `off-anchor pins: ${r.offAnchor.join(' ')}`);
 });
 
-test('v6_8_4ohm.asc: every resolved pin lands on an anchor', () => {
+test('TPLAB: the only off-anchor pins are the documented pin-to-pin pair', () => {
+  // Q1's base and R18 connect directly to each other at (16,176) with no wire
+  // between them, which LTspice permits.
+  const r = checkPins('TPLAB v4.2.asc');
+  assert.deepEqual(r.offAnchor, ['16,176', '16,176']);
+});
+
+test('v6_8_4ohm.asc: every resolved pin lands on a wire or flag', () => {
   const r = checkPins('v6_8_4ohm.asc');
-  // TIP121/TIP127 are user-supplied and absent from the stock library.
   assert.deepEqual(r.unresolved.sort(), ['TIP121', 'TIP127']);
-  assert.equal(r.hit, r.total, `unmatched pins: ${r.misses.join(' ')}`);
-  assert.ok(r.total >= 48);
+  assert.equal(r.total, 50);
+  assert.equal(r.onAnchor, 50, `off-anchor pins: ${r.offAnchor.join(' ')}`);
+  assert.deepEqual(r.offAnchor, []);
+});
+
+test('the invariant is not tautological: a wrong transform must fail it', () => {
+  // Ignore rotation entirely. If the assertion had any self-referential
+  // anchoring left, this would still score perfectly.
+  const ignoreRotation = (inst, px, py) => [inst.x + px, inst.y + py];
+  const r = checkPins('TPLAB v4.2.asc', ignoreRotation);
+  assert.equal(r.total, 102);
+  assert.equal(r.onAnchor, 73,
+    'ignoring rotation must drop TPLAB from 100 anchored pins to 73');
 });
 ```
 
@@ -901,13 +901,13 @@ If the symbol directory is not found, pass it explicitly. On this machine it is 
 - [ ] **Step 3: Run the invariant test, which now has its data**
 
 Run: `node --test test/invariant.test.js`
-Expected: PASS, 2 tests. TPLAB must report `102` total pins with `102` hits. v6 must report `TIP121`/`TIP127` as the only unresolved symbols and all resolved pins hitting anchors.
+Expected: PASS, 4 tests. TPLAB must report 102 total pins with 100 anchored (the 2 off-anchor pins are the documented (16,176) pair). v6 must report 50/50 anchored with `TIP121`/`TIP127` as the only unresolved symbols. The mutation test must confirm that ignoring rotation drops TPLAB to 73 anchored pins.
 
 This is the checkpoint the whole parsing layer was built toward. If either test fails, the failure message lists the exact unmatched coordinates — fix the parser or the transform, **do not relax the assertion**.
 
 - [ ] **Step 4: Run the whole suite**
 
-Run: `node --test test/`
+Run: `node --test`
 Expected: PASS, all tests across 5 files.
 
 - [ ] **Step 5: Commit**
@@ -999,7 +999,7 @@ test('renders a well-formed svg document for both real files', () => {
     assert.ok(svg.startsWith('<svg'), `${f}: must start with <svg`);
     assert.ok(svg.trimEnd().endsWith('</svg>'), `${f}: must end with </svg>`);
     assert.ok(svg.includes('viewBox='), `${f}: must set a viewBox`);
-    assert.ok(svg.includes('vector-effect="non-scaling-stroke"'),
+    assert.ok(/vector-effect:\s*non-scaling-stroke/.test(svg),
       `${f}: strokes must stay constant width at any zoom`);
   }
 });
@@ -1171,8 +1171,11 @@ function renderArc(a, inst) {
   const [sx, sy] = onEllipse(a0);
   const [ex, ey] = onEllipse(a1);
 
-  // LTspice draws arcs counter-clockwise from start to end in its own
-  // y-down space, which is sweep-flag 0 in SVG.
+  // delta is measured from a0 towards a1 by INCREASING theta. In this y-down
+  // parametrisation increasing theta is clockwise, which is SVG sweep-flag 1,
+  // so largeArc is only consistent with sweep = 1. Verified numerically against
+  // SVG's endpoint-to-centre conversion: sweep 0 resolves a different centre and
+  // draws a different curve, 8 units off on ferritebead's real arc.
   let delta = a1 - a0;
   while (delta <= 0) delta += Math.PI * 2;
   const largeArc = delta > Math.PI ? 1 : 0;
@@ -1180,9 +1183,15 @@ function renderArc(a, inst) {
   const [tsx, tsy] = place(inst, sx, sy);
   const [tex, tey] = place(inst, ex, ey);
   const mirrored = (inst.rot ?? 'R0').startsWith('M');
-  const sweep = mirrored ? 1 : 0;
+  const sweep = mirrored ? 0 : 1;
 
-  return `<path d="M ${tsx} ${tsy} A ${rx} ${ry} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
+  // A 90-degree rotation swaps the ellipse's axes, so the emitted radii swap
+  // too — the same ROT-then-abs treatment the CIRCLE branch uses. The angle
+  // maths above deliberately stays in the untransformed frame.
+  const [hx, hy] = ROT[inst.rot ?? 'R0'](rx, ry);
+  const erx = Math.abs(hx), ery = Math.abs(hy);
+
+  return `<path d="M ${tsx} ${tsy} A ${erx} ${ery} 0 ${largeArc} ${sweep} ${tex} ${tey}" ` +
     `fill="none"${dash(a.style)}/>`;
 }
 
@@ -1320,9 +1329,33 @@ test('preserves the cp1252 micro sign end to end', () => {
 });
 
 test('hides attributes whose WINDOW size is zero', () => {
-  // Vcc has: WINDOW 123 0 0 Left 0 and SYMATTR Value2 AC 1 0
+  // Neither fixture exercises this rule: v6's size-0 WINDOW 123 entries belong
+  // to Vcc/Vee, which carry no Value2 at all, while Vs (which does) has
+  // WINDOW 123 size 2 and legitimately renders. So assert the rule directly.
+  const base = {
+    sheet: { n: 1, w: 100, h: 100 },
+    wires: [{ x1: 0, y1: 0, x2: 10, y2: 0 }],
+    flags: [], dataflags: [], texts: [], shapes: [], unknown: 0,
+  };
+  const map = { probe: { type: 'CELL', lines: [], rects: [], circles: [],
+    arcs: [], texts: [], pins: [], attrs: {}, unknown: 0,
+    windows: { 123: { x: 0, y: 0, just: 'Left', size: 2 } } } };
+  const inst = (size) => ({
+    name: 'probe', x: 0, y: 0, rot: 'R0',
+    attrs: { Value2: 'AC 1 0' },
+    windows: { 123: { x: 8, y: 8, just: 'Left', size } },
+  });
+
+  const shown = renderSvg({ ...base, symbols: [inst(2)] }, map);
+  assert.ok(shown.includes('AC 1 0'), 'size 2 must render Value2');
+
+  const hidden = renderSvg({ ...base, symbols: [inst(0)] }, map);
+  assert.ok(!hidden.includes('AC 1 0'), 'size 0 must suppress Value2');
+});
+
+test('Vs Value2 renders in the real file (WINDOW 123 size is 2 there)', () => {
   const svg = renderSvg(load('v6_8_4ohm.asc'), symbols);
-  assert.ok(!svg.includes('>AC 1 0<'), 'size-0 WINDOW must suppress Value2');
+  assert.ok(svg.includes('AC 1 0'), 'Vs carries WINDOW 123 size 2, so it shows');
 });
 
 test('renders net labels and the ground glyph', () => {
@@ -1491,12 +1524,12 @@ Extend the `<style>` block inside `renderSvg` with:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/render-text.test.js`
-Expected: PASS, 11 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 5: Run the full suite**
 
-Run: `node --test test/`
-Expected: PASS across all 7 test files.
+Run: `node --test`
+Expected: PASS across all 7 test files (63 tests).
 
 - [ ] **Step 6: Commit**
 
@@ -1854,7 +1887,7 @@ function resetView() { /* replaced in Task 10 */ }
 
 - [ ] **Step 2: Rebuild**
 
-Run: `node tools/build.mjs && node --test test/`
+Run: `node tools/build.mjs && node --test`
 Expected: build succeeds; all existing tests still PASS.
 
 - [ ] **Step 3: Verify by hand in a browser**
@@ -1922,11 +1955,14 @@ function zoomAbout(cx, cy, factor) {
   applyView();
 }
 
+// zoomAbout works in stage-relative coordinates, so convert here rather than
+// hardcoding the top-bar height.
 function midpoint() {
   const pts = [...pointers.values()];
+  const r = $('stage').getBoundingClientRect();
   return {
-    x: (pts[0].x + pts[1].x) / 2,
-    y: (pts[0].y + pts[1].y) / 2,
+    x: (pts[0].x + pts[1].x) / 2 - r.left,
+    y: (pts[0].y + pts[1].y) / 2 - r.top,
     d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
   };
 }
@@ -1973,10 +2009,13 @@ function initGestures() {
   stage.addEventListener('pointerup', release);
   stage.addEventListener('pointercancel', release);
 
-  // Desktop convenience; harmless on touch devices.
+  // Desktop convenience; harmless on touch devices. The stage origin is read
+  // from layout rather than hardcoded, so the CSS bar height stays the single
+  // source of truth for it.
   stage.addEventListener('wheel', (e) => {
     e.preventDefault();
-    zoomAbout(e.clientX, e.clientY - 57, Math.exp(-e.deltaY * 0.002));
+    const r = stage.getBoundingClientRect();
+    zoomAbout(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.002));
   }, { passive: false });
 
   $('fit').addEventListener('click', resetView);
@@ -1996,7 +2035,7 @@ The SVG's `viewBox` already fits the content to the element box, and the element
 
 - [ ] **Step 2: Rebuild and run the suite**
 
-Run: `node tools/build.mjs && node --test test/`
+Run: `node tools/build.mjs && node --test`
 Expected: build succeeds; all tests PASS.
 
 - [ ] **Step 3: Verify gestures by hand**
@@ -2093,7 +2132,7 @@ unknown, so wires will not meet them correctly.
 ## Develop
 
 ```bash
-node --test test/          # run the test suite
+node --test          # run the test suite
 node tools/gen-symbols.mjs # regenerate symbols.json (needs LTspice installed)
 node tools/build.mjs       # rebuild spiceviewer.html
 ```
@@ -2114,7 +2153,7 @@ so **top-level identifiers must be unique across `src/*.js`**.
 Run each and record the real output:
 
 ```bash
-node --test test/
+node --test
 node tools/build.mjs
 ```
 
@@ -2122,8 +2161,8 @@ Expected: every test passes; the build reports a size.
 
 Then, in a 390 px viewport, confirm and record:
 
-1. `TPLAB v4.2.asc` renders with all 40 components, no placeholder boxes.
-2. `v6_8_4ohm.asc` renders with 24 components plus 2 dashed placeholders and the banner.
+1. `TPLAB v4.2.asc` renders with all 45 components, no placeholder boxes.
+2. `v6_8_4ohm.asc` renders with 23 resolved components plus 2 dashed placeholders and the banner.
 3. Component values read correctly at zoom, `100µ` included with its micro sign.
 4. Net labels `vcc`, `vee`, `Vo`, `Vin-` are visible and legible.
 5. Ground glyphs appear at every `FLAG … 0`.
@@ -2146,9 +2185,9 @@ At completion, all of the following must hold, each confirmed by actual output r
 
 | Check | Command / method |
 |---|---|
-| All tests pass | `node --test test/` |
+| All tests pass | `node --test` |
 | Both files parse with zero unknown lines | `test/parse-asc.test.js` |
-| Pin invariant holds (102/102 and all resolved v6 pins) | `test/invariant.test.js` |
+| Pin invariant holds (TPLAB 100/102 anchored, v6 50/50) and is non-tautological | `test/invariant.test.js` |
 | Build is self-contained | `test/build.test.js` |
 | cp1252 `µ` survives end to end | `test/render-text.test.js` |
 | Renders correctly at phone width | Manual, Task 11 Step 4 |

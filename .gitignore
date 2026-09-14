@@ -3,3 +3,5 @@ dist/
 *.log
 .worktrees/
 .superpowers/
+.claude/
+tools/serve-harness.mjs
