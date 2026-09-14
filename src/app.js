@@ -147,6 +147,8 @@ const view = { x: 0, y: 0, k: 1 };
 const pointers = new Map();
 let pinchStart = null;
 let lastTap = 0;
+let lastTapPos = null;
+const DOUBLE_TAP_SLOP = 20; // px; a tap that starts a drag must not be misread as the second tap
 
 function svgEl() {
   return $('stage').querySelector('svg');
@@ -192,11 +194,21 @@ function initGestures() {
   stage.addEventListener('pointerdown', (e) => {
     stage.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 2) pinchStart = midpoint();
+    if (pointers.size === 2) {
+      pinchStart = midpoint();
+      // A second finger joining is never the second tap of a double-tap —
+      // otherwise pinch, lift, then a single tap misreads as a double-tap.
+      lastTap = 0;
+    }
 
-    const now = Date.now();
-    if (pointers.size === 1 && now - lastTap < 300) resetView();
-    lastTap = now;
+    if (pointers.size === 1) {
+      const now = Date.now();
+      const moved = lastTapPos &&
+        Math.hypot(e.clientX - lastTapPos.x, e.clientY - lastTapPos.y) > DOUBLE_TAP_SLOP;
+      if (now - lastTap < 300 && !moved) resetView();
+      lastTap = now;
+      lastTapPos = { x: e.clientX, y: e.clientY };
+    }
   });
 
   stage.addEventListener('pointermove', (e) => {
